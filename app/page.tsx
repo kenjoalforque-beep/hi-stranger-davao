@@ -123,7 +123,8 @@ const res = await fetch("/api/join", {
       sessionStorage.setItem("iam", String(iAm));
       sessionStorage.setItem("lookingFor", String(lookingFor));
 
-      window.location.href = `/wait?queue_id=${encodeURIComponent(data.queue_id)}`;
+      window.location.href = `/wait?qid=${data.queue_id}`;
+
     } catch {
       setJoinError("Network error. Please try again.");
     } finally {
