@@ -1,4 +1,8 @@
-// Asia/Manila time rules for Hi, Stranger
+// lib/time.ts
+
+function forceOpen() {
+  return process.env.HS_FORCE_OPEN === "1";
+}
 
 export function manilaNowParts(date = new Date()) {
   const fmt = new Intl.DateTimeFormat("en-US", {
@@ -20,27 +24,30 @@ export function manilaNowParts(date = new Date()) {
   return { h, m, s };
 }
 
-// Open window: 9:00–10:00 PM
+// Open window: 9:00–10:00 PM Philippine Time (hour=21 only)
 export function isWithinOpenHour() {
+  if (forceOpen()) return true;
   const { h } = manilaNowParts();
   return h === 21;
 }
 
 // Entry allowed only before 9:45 PM
 export function canEnterNow() {
+  if (forceOpen()) return true;
   const { h, m } = manilaNowParts();
   return h === 21 && m < 45;
 }
 
 // Matching allowed only before 9:50 PM
 export function canMatchNow() {
+  if (forceOpen()) return true;
   const { h, m } = manilaNowParts();
   return h === 21 && m < 50;
 }
 
-// Hard close at 10:00 PM
+// Hard close outside 9:00–10:00 PM
 export function isHardClosed() {
+  if (forceOpen()) return false;
   const { h } = manilaNowParts();
   return h !== 21;
 }
-
