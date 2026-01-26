@@ -42,9 +42,8 @@ export default function RoomPage() {
 
   const [ending, setEnding] = useState(false);
   const [ended, setEnded] = useState(false);
-  const [endedReason, setEndedReason] = useState<"you" | "other" | "system">(
-    "system"
-  );
+  const [endedReason, setEndedReason] =
+    useState<"you" | "other" | "system">("system");
 
   const [limitMsg, setLimitMsg] = useState<string>("");
   const [endsLeft, setEndsLeft] = useState<number>(2);
@@ -52,10 +51,10 @@ export default function RoomPage() {
   const otherTypingTimer = useRef<any>(null);
   const myTypingTimer = useRef<any>(null);
 
-  // ✅ STEP 1: Auto-scroll anchor
+  // Auto-scroll anchor
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  // ✅ STEP 2: textarea autosize (max 3 lines)
+  // textarea autosize (max 3 lines)
   const taRef = useRef<HTMLTextAreaElement | null>(null);
 
   function autosizeTextarea() {
@@ -63,15 +62,11 @@ export default function RoomPage() {
     if (!el) return;
 
     el.style.height = "auto";
-
-    // Max ~3 lines (tweak numbers if you change padding/font size)
-    const linePx = 20;
-    const maxPx = linePx * 3 + 16;
-
+    const maxPx = 96; // ~3 lines depending on padding/font
     el.style.height = Math.min(el.scrollHeight, maxPx) + "px";
   }
 
-  // ✅ STEP 1: Auto-scroll whenever a message is added
+  // Auto-scroll when message count changes
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length]);
@@ -116,7 +111,6 @@ export default function RoomPage() {
       }
     });
 
-    // Other user ended
     ch.on("broadcast", { event: "end" }, () => {
       setEndedReason("other");
       setEnded(true);
@@ -159,7 +153,7 @@ export default function RoomPage() {
     return () => clearInterval(interval);
   }, [roomId]);
 
-  // Load tonight's remaining self-end limit (persists across new chats)
+  // Load tonight's remaining self-end limit
   useEffect(() => {
     async function loadLimit() {
       try {
@@ -174,11 +168,8 @@ export default function RoomPage() {
         if (res.ok && data?.ok) {
           setEndsLeft(Number(data.ends_left ?? 2));
         }
-      } catch {
-        // ignore
-      }
+      } catch {}
     }
-
     loadLimit();
   }, [userToken]);
 
@@ -258,7 +249,6 @@ export default function RoomPage() {
       const left = Math.max(0, 2 - count);
       setEndsLeft(left);
 
-      // Notify other user immediately
       const ch = chRef.current;
       if (ch) {
         await ch.send({
@@ -289,8 +279,7 @@ export default function RoomPage() {
     return (
       <main className="h-[100dvh] bg-white flex flex-col">
         <div className="flex-1 flex items-center justify-center p-3">
-
-          <div className="w-full max-w-md h-[100dvh] sm:h-auto sm:max-h-[720px] rounded-2xl border border-teal-200 bg-white shadow-sm overflow-hidden flex flex-col">
+          <div className="w-full max-w-md rounded-2xl border border-teal-200 bg-white shadow-sm overflow-hidden p-6">
             <h1 className="text-2xl font-semibold text-teal-700">
               Your chat has ended.
             </h1>
@@ -316,132 +305,134 @@ export default function RoomPage() {
 
         <footer className="pb-4 flex justify-center">
           <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-xs text-gray-700">
-            Original concept by Kenjo © 2026
+            Hi, Stranger created by Kenjo © 2026
           </div>
         </footer>
       </main>
     );
   }
 
-  // Normal chat screen
+  // Normal chat screen (STABLE)
   return (
-  <main className="h-[100dvh] bg-white flex flex-col">
-    {/* Center wrapper */}
-    <div className="flex-1 flex items-center justify-center p-3">
-      {/* Chat card fills viewport height on mobile */}
-      <div className="w-full max-w-md h-[100dvh] sm:h-auto sm:max-h-[720px] rounded-2xl border border-teal-200 bg-white shadow-sm overflow-hidden flex flex-col">
+    <main className="h-[100dvh] bg-white flex flex-col">
+      <div className="flex-1 flex items-center justify-center p-3">
+        <div className="w-full max-w-md h-[100dvh] sm:h-auto sm:max-h-[720px] rounded-2xl border border-teal-200 bg-white shadow-sm overflow-hidden flex flex-col">
 
-        {/* Header */}
-        <div className="p-5 border-b border-teal-100 bg-teal-50">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-semibold text-teal-700">Hi, Stranger</h1>
+          {/* Header (compact left/right) */}
+          <div className="px-4 py-3 border-b border-teal-100 bg-teal-50">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-lg font-semibold text-teal-700 leading-tight">
+                  Hi, Stranger
+                </div>
+                <div className="mt-0.5 text-xs text-gray-600 leading-tight">
+                  {connected ? "Connected" : "Connecting…"}
+                </div>
+              </div>
 
-            <button
-              onClick={endChat}
-              disabled={ending}
-              className={
-                ending
-                  ? "text-xs rounded-xl px-3 py-2 bg-gray-200 text-gray-500 cursor-not-allowed"
-                  : "text-xs rounded-xl px-3 py-2 bg-white border border-teal-200 text-teal-700 hover:bg-teal-100 transition"
-              }
-            >
-              {ending ? "Ending…" : "End chat"}
-            </button>
-          </div>
+              <div className="flex flex-col items-end gap-1 shrink-0">
+                <button
+                  onClick={endChat}
+                  disabled={ending}
+                  className={
+                    ending
+                      ? "text-xs rounded-xl px-3 py-2 bg-gray-200 text-gray-500 cursor-not-allowed"
+                      : "text-xs rounded-xl px-3 py-2 bg-white border border-teal-200 text-teal-700 hover:bg-teal-100 transition"
+                  }
+                >
+                  {ending ? "Ending…" : "End chat"}
+                </button>
 
-          {/* Hide room id from users */}
-          <div className="mt-1 text-xs text-gray-600">
-            {connected ? "Connected" : "Connecting…"}
-          </div>
-
-          <div className="mt-2 text-xs text-gray-600">
-            End chat limit left: <b>{endsLeft}</b>
-          </div>
-
-          {limitMsg ? <div className="mt-2 text-xs text-red-600">{limitMsg}</div> : null}
-        </div>
-
-        {/* Messages scroll area */}
-        <div className="p-4 flex-1 overflow-y-auto bg-white">
-          {messages.length === 0 ? (
-            <div className="text-sm text-gray-600">
-              Say hi 👋 (No history — messages disappear on refresh.)
+                <div className="text-[11px] text-gray-600 leading-tight">
+                  End chat limit: <b>{endsLeft}</b>
+                </div>
+              </div>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {messages.map((m) => {
-                const mine = m.from === userToken;
-                return (
-                  <div
-                    key={m.id}
-                    className={mine ? "flex justify-end" : "flex justify-start"}
-                  >
+
+            {limitMsg ? (
+              <div className="mt-2 text-xs text-red-600">{limitMsg}</div>
+            ) : null}
+          </div>
+
+          {/* Messages scroll area */}
+          <div className="p-4 flex-1 overflow-y-auto bg-white">
+            {messages.length === 0 ? (
+              <div className="text-sm text-gray-600">
+                Say hi 👋 (No history — messages disappear on refresh.)
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {messages.map((m) => {
+                  const mine = m.from === userToken;
+                  return (
                     <div
-                      className={
-                        mine
-                          ? "max-w-[80%] rounded-2xl bg-teal-600 text-white px-4 py-2 text-sm whitespace-pre-wrap break-all"
-                          : "max-w-[80%] rounded-2xl bg-gray-100 text-gray-800 px-4 py-2 text-sm whitespace-pre-wrap break-all"
-                      }
+                      key={m.id}
+                      className={mine ? "flex justify-end" : "flex justify-start"}
                     >
-                      {m.text}
+                      <div
+                        className={
+                          mine
+                            ? "max-w-[80%] rounded-2xl bg-teal-600 text-white px-4 py-2 text-sm whitespace-pre-wrap break-words"
+                            : "max-w-[80%] rounded-2xl bg-gray-100 text-gray-800 px-4 py-2 text-sm whitespace-pre-wrap break-words"
+                        }
+                      >
+                        {m.text}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
 
-          {otherTyping ? (
-            <div className="mt-3 text-xs text-gray-600">Stranger is typing…</div>
-          ) : null}
+            {otherTyping ? (
+              <div className="mt-3 text-xs text-gray-600">Stranger is typing…</div>
+            ) : null}
 
-          <div ref={bottomRef} />
-        </div>
+            <div ref={bottomRef} />
+          </div>
 
-        {/* Composer (always visible, pinned by flex layout) */}
-        <div className="p-4 border-t border-teal-100 bg-white pb-[calc(env(safe-area-inset-bottom)+16px)]">
-          <div className="flex gap-2 items-end">
-            <textarea
-              ref={taRef}
-              value={text}
-              onChange={(e) => handleTextChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage();
+          {/* Composer */}
+          <div className="p-4 border-t border-teal-100 bg-white pb-[calc(env(safe-area-inset-bottom)+16px)]">
+            <div className="flex gap-2 items-end">
+              <textarea
+                ref={taRef}
+                value={text}
+                onChange={(e) => handleTextChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                  }
+                }}
+                rows={1}
+                placeholder="Type a message…"
+                className="flex-1 resize-none overflow-y-auto rounded-xl border border-gray-200 px-3 py-2 text-[16px] sm:text-sm outline-none focus:border-teal-300"
+              />
+              <button
+                onClick={sendMessage}
+                disabled={!connected || text.trim().length === 0}
+                className={
+                  connected && text.trim().length > 0
+                    ? "rounded-xl bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 transition"
+                    : "rounded-xl bg-gray-200 px-4 py-2 text-sm font-medium text-gray-500 cursor-not-allowed"
                 }
-              }}
-              rows={1}
-              placeholder="Type a message…"
-              className="flex-1 resize-none overflow-y-auto rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-teal-300"
-            />
-            <button
-              onClick={sendMessage}
-              disabled={!connected || text.trim().length === 0}
-              className={
-                connected && text.trim().length > 0
-                  ? "rounded-xl bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 transition"
-                  : "rounded-xl bg-gray-200 px-4 py-2 text-sm font-medium text-gray-500 cursor-not-allowed"
-              }
-            >
-              Send
-            </button>
-          </div>
+              >
+                Send
+              </button>
+            </div>
 
-          <div className="mt-2 text-xs text-gray-600">
-            No photos. No GIFs. Be kind.
+            <div className="mt-2 text-xs text-gray-600">
+              No photos. No GIFs. Be kind.
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    {/* Footer */}
-    <footer className="pb-4 flex justify-center">
-      <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-xs text-gray-700">
-        Hi, Stranger created by Kenjo (c) 2026
-      </div>
-    </footer>
-  </main>
-);
-
+      <footer className="pb-4 flex justify-center">
+        <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-xs text-gray-700">
+          Hi, Stranger created by Kenjo © 2026
+        </div>
+      </footer>
+    </main>
+  );
 }
