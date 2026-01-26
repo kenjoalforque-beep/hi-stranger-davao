@@ -52,6 +52,14 @@ export default function RoomPage() {
   const otherTypingTimer = useRef<any>(null);
   const myTypingTimer = useRef<any>(null);
 
+  // ✅ STEP 1: Auto-scroll anchor
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  // ✅ STEP 1: Auto-scroll whenever a message is added
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length]);
+
   // Realtime: messages + typing + end
   useEffect(() => {
     if (!roomId) return;
@@ -234,7 +242,11 @@ export default function RoomPage() {
       // Notify other user immediately
       const ch = chRef.current;
       if (ch) {
-        await ch.send({ type: "broadcast", event: "end", payload: { by: userToken } });
+        await ch.send({
+          type: "broadcast",
+          event: "end",
+          payload: { by: userToken },
+        });
       }
 
       setEndedReason("you");
@@ -298,7 +310,9 @@ export default function RoomPage() {
         <div className="w-full max-w-md rounded-2xl border border-teal-200 bg-white shadow-sm overflow-hidden">
           <div className="p-5 border-b border-teal-100 bg-teal-50">
             <div className="flex items-center justify-between">
-              <h1 className="text-xl font-semibold text-teal-700">Hi, Stranger</h1>
+              <h1 className="text-xl font-semibold text-teal-700">
+                Hi, Stranger
+              </h1>
 
               <button
                 onClick={endChat}
@@ -322,9 +336,12 @@ export default function RoomPage() {
               End chat limit left: <b>{endsLeft}</b>
             </div>
 
-            {limitMsg ? <div className="mt-2 text-xs text-red-600">{limitMsg}</div> : null}
+            {limitMsg ? (
+              <div className="mt-2 text-xs text-red-600">{limitMsg}</div>
+            ) : null}
           </div>
 
+          {/* ✅ Scrollable area: keep anchor inside this */}
           <div className="p-4 h-[420px] overflow-y-auto bg-white">
             {messages.length === 0 ? (
               <div className="text-sm text-gray-600">
@@ -335,7 +352,10 @@ export default function RoomPage() {
                 {messages.map((m) => {
                   const mine = m.from === userToken;
                   return (
-                    <div key={m.id} className={mine ? "flex justify-end" : "flex justify-start"}>
+                    <div
+                      key={m.id}
+                      className={mine ? "flex justify-end" : "flex justify-start"}
+                    >
                       <div
                         className={
                           mine
@@ -354,6 +374,9 @@ export default function RoomPage() {
             {otherTyping ? (
               <div className="mt-3 text-xs text-gray-600">Stranger is typing…</div>
             ) : null}
+
+            {/* ✅ STEP 1: Bottom anchor for auto-scroll */}
+            <div ref={bottomRef} />
           </div>
 
           <div className="p-4 border-t border-teal-100 bg-white">
