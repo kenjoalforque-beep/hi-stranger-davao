@@ -81,7 +81,6 @@ function getNext9pmCountdownMs() {
   const ninePMSeconds = 21 * 3600;
 
   if (nowManilaTotalSeconds >= ninePMSeconds) {
-    // add 1 day
     const t = new Date(targetUTC);
     t.setUTCDate(t.getUTCDate() + 1);
     targetUTC = t.getTime();
@@ -123,7 +122,6 @@ export default function Page() {
       setPhDate(p.dateDisplay);
       setPhTime(p.timeDisplay);
 
-      // ✅ countdown only when CLOSED
       if (status === "closed") {
         const ms = getNext9pmCountdownMs();
         setCountdown(msToHMS(ms));
@@ -142,7 +140,6 @@ export default function Page() {
       }
     }
 
-    // initial
     loadStatus();
     tick();
 
@@ -153,7 +150,6 @@ export default function Page() {
       clearInterval(clock);
       clearInterval(poll);
     };
-    // IMPORTANT: status is used in tick(), so we want tick to re-evaluate when status changes
   }, [status]);
 
   async function handleJoin() {
@@ -232,6 +228,7 @@ export default function Page() {
             Anonymous 1-on-1 chat. No history. 9:00–10:00 PM (PH).
           </p>
 
+          {/* ✅ Time / Status card */}
           <div className="mt-4 rounded-2xl border border-teal-100 bg-white/70 backdrop-blur p-4 shadow-sm">
             <div className="text-sm text-gray-800">
               <span className="font-medium">{phDate}</span>{" "}
@@ -240,31 +237,32 @@ export default function Page() {
             </div>
 
             <div className="mt-1 text-xs text-gray-600 flex items-center gap-2 flex-wrap">
-  <span>
-    Status:{" "}
-    <span className="font-medium text-teal-700">
-      {status === "open"
-        ? "Open"
-        : status === "entry_closed"
-        ? "Entry closed"
-        : status === "matching_closed"
-        ? "Matching closed"
-        : "Closed"}
-    </span>
-  </span>
+              <span>
+                Status:{" "}
+                <span className="font-medium text-teal-700">
+                  {status === "open"
+                    ? "Open"
+                    : status === "entry_closed"
+                    ? "Entry closed"
+                    : status === "matching_closed"
+                    ? "Matching closed"
+                    : "Closed"}
+                </span>
+              </span>
 
-  {status === "closed" && (
-    <span className="text-gray-500">
-      · Opens in{" "}
-      <span className="font-mono font-semibold text-teal-700">
-        {countdown || "--:--:--"}
-      </span>
-    </span>
-  )}
-</div>
-
+              {status === "closed" && (
+                <span className="text-gray-500">
+                  · Opens in{" "}
+                  <span className="font-mono font-semibold text-teal-700">
+                    {countdown || "--:--:--"}
+                  </span>
+                </span>
+              )}
+            </div>
+          </div>
 
           <p className="mt-6 text-sm font-semibold text-gray-800">I am a…</p>
+
           <div className="mt-3 space-y-2">
             <label className={optionClass}>
               <input
@@ -303,6 +301,7 @@ export default function Page() {
           <p className="mt-6 text-sm font-semibold text-gray-800">
             I want to chat with…
           </p>
+
           <div className="mt-3 space-y-2">
             <label className={optionClass}>
               <input
