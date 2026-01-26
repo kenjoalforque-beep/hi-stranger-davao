@@ -32,6 +32,16 @@ function getPhilippineNow() {
   return { date: df.format(now), time };
 }
 
+function safeUUID() {
+  try {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+      // @ts-ignore
+      return crypto.randomUUID();
+    }
+  } catch {}
+  return `x_${Math.random().toString(16).slice(2)}_${Date.now()}`;
+}
+
 export default function Page() {
   const [phDate, setPhDate] = useState("");
   const [phTime, setPhTime] = useState("--:--:--");
@@ -85,10 +95,11 @@ export default function Page() {
       const user_token =
   sessionStorage.getItem("hs_user_token") ??
   (() => {
-    const t = crypto.randomUUID();
+    const t = safeUUID();
     sessionStorage.setItem("hs_user_token", t);
     return t;
   })();
+
 
 const res = await fetch("/api/join", {
   method: "POST",
@@ -126,7 +137,7 @@ const res = await fetch("/api/join", {
       window.location.href = `/wait?qid=${data.queue_id}`;
 
     } catch {
-      setJoinError("Network error. Please try again.");
+      setJoinError("Something blocked the request. Please try again.");
     } finally {
       setJoining(false);
     }
