@@ -12,19 +12,57 @@ type ChatMsg = {
 };
 
 function uuid() {
-  return typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `x_${Math.random().toString(16).slice(2)}_${Date.now()}`;
+  // Prefer native UUID when available
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    // @ts-ignore
+    return crypto.randomUUID();
+  }
+
+  // RFC4122 v4 fallback using getRandomValues (still a REAL UUID)
+  if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+
+    // Set version (4) and variant (10)
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    const hex = [...bytes]
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    return (
+      hex.slice(0, 8) +
+      "-" +
+      hex.slice(8, 12) +
+      "-" +
+      hex.slice(12, 16) +
+      "-" +
+      hex.slice(16, 20) +
+      "-" +
+      hex.slice(20)
+    );
+  }
+
+  // Very old browsers only (shouldn't happen on modern phones)
+  return "00000000-0000-4000-8000-000000000000";
 }
 
 function getUserToken() {
   const key = "hs_user_token";
   const existing = sessionStorage.getItem(key);
-  if (existing) return existing;
+
+  const isUuid = (v: any) =>
+    typeof v === "string" && /^[0-9a-fA-F-]{36}$/.test(v);
+
+  // ✅ If token exists but is BAD (like "x_..."), regenerate it
+  if (existing && isUuid(existing)) return existing;
+
   const t = uuid();
   sessionStorage.setItem(key, t);
   return t;
 }
+
 
 export default function RoomPage() {
   const params = useParams<{ id: string }>();
@@ -218,54 +256,67 @@ export default function RoomPage() {
   }
 
   async function endChat() {
-    if (!roomId || ending || ended) return;
+  if (!roomId || ending || ended) return;
 
-    setLimitMsg("");
-    setEnding(true);
+  setLimitMsg("");
+  setEnding(true);
 
-    try {
-      const res = await fetch("/api/end", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({ room_id: roomId, user_token: userToken }),
-      });
+  try {
+    const res = await fetch("/api/end", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({ room_id: roomId, user_token: userToken }),
+    });
 
-      const data = await res.json().catch(() => null);
+    const data = await res.json().catch(() => null);
 
-      if (!res.ok || !data?.ok) {
-        if (data?.error === "limit_reached") {
-          setEndsLeft(0);
-          setLimitMsg("You’ve reached your limit: max 2 self-ends per night.");
-          setEnding(false);
-          return;
-        }
-        setLimitMsg("Something went wrong. Please try again.");
-        setEnding(false);
-        return;
+    // ✅ Show the real reason on screen (for debugging)
+    if (!res.ok || !data?.ok) {
+      const apiErr =
+        data?.error || data?.message || data?.details || "unknown_error";
+      const hint = `End failed (HTTP ${res.status}): ${apiErr}`;
+
+      if (apiErr === "limit_reached") {
+        setEndsLeft(0);
+        setLimitMsg("You’ve reached your limit: max 2 self-ends per night.");
+      } else if (apiErr === "not_participant" || apiErr === "unauthorized") {
+        setLimitMsg(
+          "End failed: your session token doesn’t match this room (reload the main page and rejoin)."
+        );
+      } else if (apiErr === "room_not_found") {
+        setLimitMsg("End failed: room not found (it may have already closed).");
+      } else {
+        setLimitMsg(hint);
       }
 
-      const count = Number(data?.self_end_count ?? 0);
-      const left = Math.max(0, 2 - count);
-      setEndsLeft(left);
-
-      const ch = chRef.current;
-      if (ch) {
-        await ch.send({
-          type: "broadcast",
-          event: "end",
-          payload: { by: userToken },
-        });
-      }
-
-      setEndedReason("you");
-      setEnded(true);
       setEnding(false);
-    } catch {
-      setLimitMsg("Connection issue. Please try again.");
-      setEnding(false);
+      return;
     }
+
+    const count = Number(data?.self_end_count ?? 0);
+    const left = Math.max(0, 2 - count);
+    setEndsLeft(left);
+
+    // Notify other user immediately
+    const ch = chRef.current;
+    if (ch) {
+      await ch.send({
+        type: "broadcast",
+        event: "end",
+        payload: { by: userToken },
+      });
+    }
+
+    setEndedReason("you");
+    setEnded(true);
+    setEnding(false);
+  } catch (e: any) {
+    setLimitMsg(`End failed: network/error (${String(e?.message || e)})`);
+    setEnding(false);
   }
+}
+
 
   // End screen
   if (ended) {
