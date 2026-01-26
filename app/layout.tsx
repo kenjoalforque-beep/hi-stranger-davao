@@ -9,10 +9,15 @@ const chewy = Chewy({
   variable: "--font-chewy",
 });
 
-export const metadata: Metadata = {
+export const metadata = {
   title: "Hi, Stranger",
-  description: "Anonymous 1-on-1 chat. No history.",
+  description: "Anonymous 1-on-1 chat",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
 };
+
 
 export default function RootLayout({
   children,
