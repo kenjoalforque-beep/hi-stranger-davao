@@ -12,36 +12,45 @@ type ChatMsg = {
 };
 
 function uuid() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    // @ts-ignore
-    return crypto.randomUUID();
-  }
+  const c = (globalThis as any).crypto as Crypto | undefined;
 
-  if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
-    const bytes = new Uint8Array(16);
-    crypto.getRandomValues(bytes);
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  // Prefer native UUID when available
+  try {
+    if (c?.randomUUID) return c.randomUUID();
+  } catch {}
 
-    const hex = [...bytes]
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+  // RFC4122 v4 fallback using getRandomValues
+  try {
+    if (c?.getRandomValues) {
+      const bytes = new Uint8Array(16);
+      c.getRandomValues(bytes);
 
-    return (
-      hex.slice(0, 8) +
-      "-" +
-      hex.slice(8, 12) +
-      "-" +
-      hex.slice(12, 16) +
-      "-" +
-      hex.slice(16, 20) +
-      "-" +
-      hex.slice(20)
-    );
-  }
+      // Set version (4) and variant (10)
+      bytes[6] = (bytes[6] & 0x0f) | 0x40;
+      bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
+      const hex = [...bytes]
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+
+      return (
+        hex.slice(0, 8) +
+        "-" +
+        hex.slice(8, 12) +
+        "-" +
+        hex.slice(12, 16) +
+        "-" +
+        hex.slice(16, 20) +
+        "-" +
+        hex.slice(20)
+      );
+    }
+  } catch {}
+
+  // Very old browsers only
   return "00000000-0000-4000-8000-000000000000";
 }
+
 
 function getUserToken() {
   const key = "hs_user_token";
