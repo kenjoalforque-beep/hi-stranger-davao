@@ -239,30 +239,30 @@ export default function Page() {
               <span className="text-gray-600">PH Time</span>
             </div>
 
-            <div className="mt-1 text-xs text-gray-600">
-              Status:{" "}
-              <span className="font-medium text-teal-700">
-                {status === "open"
-                  ? "Open"
-                  : status === "entry_closed"
-                  ? "Entry closed"
-                  : status === "matching_closed"
-                  ? "Matching closed"
-                  : "Closed"}
-              </span>
-            </div>
+            <div className="mt-1 text-xs text-gray-600 flex items-center gap-2 flex-wrap">
+  <span>
+    Status:{" "}
+    <span className="font-medium text-teal-700">
+      {status === "open"
+        ? "Open"
+        : status === "entry_closed"
+        ? "Entry closed"
+        : status === "matching_closed"
+        ? "Matching closed"
+        : "Closed"}
+    </span>
+  </span>
 
-            {/* ✅ Countdown when closed */}
-            {status === "closed" ? (
-              <div className="mt-2 text-xs text-gray-700">
-                Opens in{" "}
-                <span className="font-mono font-semibold text-teal-700">
-                  {countdown || "--:--:--"}
-                </span>{" "}
-                <span className="text-gray-500">(until 9:00 PM)</span>
-              </div>
-            ) : null}
-          </div>
+  {status === "closed" && (
+    <span className="text-gray-500">
+      · Opens in{" "}
+      <span className="font-mono font-semibold text-teal-700">
+        {countdown || "--:--:--"}
+      </span>
+    </span>
+  )}
+</div>
+
 
           <p className="mt-6 text-sm font-semibold text-gray-800">I am a…</p>
           <div className="mt-3 space-y-2">
