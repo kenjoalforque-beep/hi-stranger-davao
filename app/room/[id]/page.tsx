@@ -12,18 +12,14 @@ type ChatMsg = {
 };
 
 function uuid() {
-  // Prefer native UUID when available
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     // @ts-ignore
     return crypto.randomUUID();
   }
 
-  // RFC4122 v4 fallback using getRandomValues (still a REAL UUID)
   if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
     const bytes = new Uint8Array(16);
     crypto.getRandomValues(bytes);
-
-    // Set version (4) and variant (10)
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
@@ -44,7 +40,6 @@ function uuid() {
     );
   }
 
-  // Very old browsers only (shouldn't happen on modern phones)
   return "00000000-0000-4000-8000-000000000000";
 }
 
@@ -55,14 +50,12 @@ function getUserToken() {
   const isUuid = (v: any) =>
     typeof v === "string" && /^[0-9a-fA-F-]{36}$/.test(v);
 
-  // ✅ If token exists but is BAD (like "x_..."), regenerate it
   if (existing && isUuid(existing)) return existing;
 
   const t = uuid();
   sessionStorage.setItem(key, t);
   return t;
 }
-
 
 export default function RoomPage() {
   const params = useParams<{ id: string }>();
@@ -89,27 +82,57 @@ export default function RoomPage() {
   const otherTypingTimer = useRef<any>(null);
   const myTypingTimer = useRef<any>(null);
 
-  // Auto-scroll anchor
   const bottomRef = useRef<HTMLDivElement | null>(null);
-
-  // textarea autosize (max 3 lines)
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // --- NEW: local message persistence (refresh-safe, cleared only on End Chat) ---
+  const storageKey = useMemo(() => (roomId ? `hs_chat_${roomId}` : ""), [roomId]);
+
+  // Restore on room load
+  useEffect(() => {
+    if (!roomId) return;
+    try {
+      const saved = sessionStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) setMessages(parsed as ChatMsg[]);
+      }
+    } catch {
+      // ignore corrupted cache
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId]);
+
+  // Save whenever messages change
+  useEffect(() => {
+    if (!roomId) return;
+    try {
+      sessionStorage.setItem(storageKey, JSON.stringify(messages));
+    } catch {
+      // ignore quota / private mode issues
+    }
+  }, [messages, roomId, storageKey]);
+
+  function clearLocalHistory() {
+    if (!roomId) return;
+    try {
+      sessionStorage.removeItem(storageKey);
+    } catch {}
+  }
+  // ---------------------------------------------------------------------------
 
   function autosizeTextarea() {
     const el = taRef.current;
     if (!el) return;
-
     el.style.height = "auto";
-    const maxPx = 96; // ~3 lines depending on padding/font
-    el.style.height = Math.min(el.scrollHeight, maxPx) + "px";
+    el.style.height = Math.min(el.scrollHeight, 96) + "px";
   }
 
-  // Auto-scroll when message count changes
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length]);
 
-  // Realtime: messages + typing + end
+  // ====== REALTIME LOGIC (UNCHANGED) ======
   useEffect(() => {
     if (!roomId) return;
 
@@ -139,7 +162,6 @@ export default function RoomPage() {
       if (!p?.from || p.from === userToken) return;
 
       setOtherTyping(Boolean(p.typing));
-
       if (otherTypingTimer.current) clearTimeout(otherTypingTimer.current);
       if (p.typing) {
         otherTypingTimer.current = setTimeout(
@@ -149,7 +171,9 @@ export default function RoomPage() {
       }
     });
 
+    // Other user ended -> clear local history too (end is the only wipe trigger)
     ch.on("broadcast", { event: "end" }, () => {
+      clearLocalHistory();
       setEndedReason("other");
       setEnded(true);
     });
@@ -167,9 +191,10 @@ export default function RoomPage() {
       if (otherTypingTimer.current) clearTimeout(otherTypingTimer.current);
       if (myTypingTimer.current) clearTimeout(myTypingTimer.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, channelName, userToken]);
 
-  // DB watch: if ended_at is set, show ended screen
+  // DB watch: if ended_at is set, show ended screen (and clear local history)
   useEffect(() => {
     if (!roomId) return;
 
@@ -182,6 +207,7 @@ export default function RoomPage() {
           .maybeSingle();
 
         if (data?.ended_at) {
+          clearLocalHistory();
           setEndedReason("system");
           setEnded(true);
         }
@@ -189,6 +215,7 @@ export default function RoomPage() {
     }, 2000);
 
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
   // Load tonight's remaining self-end limit
@@ -256,69 +283,69 @@ export default function RoomPage() {
   }
 
   async function endChat() {
-  if (!roomId || ending || ended) return;
+    if (!roomId || ending || ended) return;
 
-  setLimitMsg("");
-  setEnding(true);
+    setLimitMsg("");
+    setEnding(true);
 
-  try {
-    const res = await fetch("/api/end", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      body: JSON.stringify({ room_id: roomId, user_token: userToken }),
-    });
+    try {
+      const res = await fetch("/api/end", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ room_id: roomId, user_token: userToken }),
+      });
 
-    const data = await res.json().catch(() => null);
+      const data = await res.json().catch(() => null);
 
-    // ✅ Show the real reason on screen (for debugging)
-    if (!res.ok || !data?.ok) {
-      const apiErr =
-        data?.error || data?.message || data?.details || "unknown_error";
-      const hint = `End failed (HTTP ${res.status}): ${apiErr}`;
+      if (!res.ok || !data?.ok) {
+        const apiErr =
+          data?.error || data?.message || data?.details || "unknown_error";
+        const hint = `End failed (HTTP ${res.status}): ${apiErr}`;
 
-      if (apiErr === "limit_reached") {
-        setEndsLeft(0);
-        setLimitMsg("You’ve reached your limit: max 2 self-ends per night.");
-      } else if (apiErr === "not_participant" || apiErr === "unauthorized") {
-        setLimitMsg(
-          "End failed: your session token doesn’t match this room (reload the main page and rejoin)."
-        );
-      } else if (apiErr === "room_not_found") {
-        setLimitMsg("End failed: room not found (it may have already closed).");
-      } else {
-        setLimitMsg(hint);
+        if (apiErr === "limit_reached") {
+          setEndsLeft(0);
+          setLimitMsg("You’ve reached your limit: max 2 self-ends per night.");
+        } else if (apiErr === "not_participant" || apiErr === "unauthorized") {
+          setLimitMsg(
+            "End failed: your session token doesn’t match this room (reload the main page and rejoin)."
+          );
+        } else if (apiErr === "room_not_found") {
+          setLimitMsg("End failed: room not found (it may have already closed).");
+        } else {
+          setLimitMsg(hint);
+        }
+
+        setEnding(false);
+        return;
       }
 
+      const count = Number(data?.self_end_count ?? 0);
+      const left = Math.max(0, 2 - count);
+      setEndsLeft(left);
+
+      // ✅ Clear local history ONLY when chat ends
+      clearLocalHistory();
+
+      const ch = chRef.current;
+      if (ch) {
+        await ch.send({
+          type: "broadcast",
+          event: "end",
+          payload: { by: userToken },
+        });
+      }
+
+      setEndedReason("you");
+      setEnded(true);
       setEnding(false);
-      return;
+    } catch (e: any) {
+      setLimitMsg(`End failed: network/error (${String(e?.message || e)})`);
+      setEnding(false);
     }
-
-    const count = Number(data?.self_end_count ?? 0);
-    const left = Math.max(0, 2 - count);
-    setEndsLeft(left);
-
-    // Notify other user immediately
-    const ch = chRef.current;
-    if (ch) {
-      await ch.send({
-        type: "broadcast",
-        event: "end",
-        payload: { by: userToken },
-      });
-    }
-
-    setEndedReason("you");
-    setEnded(true);
-    setEnding(false);
-  } catch (e: any) {
-    setLimitMsg(`End failed: network/error (${String(e?.message || e)})`);
-    setEnding(false);
   }
-}
 
-
-  // End screen
+  // ====== END SCREEN (UI ONLY) ======
   if (ended) {
     const subtitle =
       endedReason === "you"
@@ -328,162 +355,144 @@ export default function RoomPage() {
         : "This chat has ended.";
 
     return (
-      <main className="h-[100dvh] bg-white flex flex-col">
-        <div className="flex-1 flex items-center justify-center p-3">
-          <div className="w-full max-w-md rounded-2xl border border-teal-200 bg-white shadow-sm overflow-hidden p-6">
-            <h1 className="text-2xl font-semibold text-teal-700">
-              Your chat has ended.
+      <main className="min-h-screen bg-gradient-to-b from-teal-50 via-white to-white flex flex-col">
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white/90 backdrop-blur border border-teal-100 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.25)] p-6">
+            <h1
+              className="text-3xl sm:text-4xl text-teal-700 tracking-wide"
+              style={{ fontFamily: "var(--font-chewy)" }}
+            >
+              Hi, Stranger
             </h1>
-            <p className="mt-2 text-sm text-gray-700">{subtitle}</p>
 
-            <div className="mt-4 rounded-xl border border-teal-200 bg-teal-50 p-3 text-sm text-gray-800 flex items-center gap-2">
-              <span className="text-teal-500 text-lg">♥</span>
-              <span>Thank you for being here tonight.</span>
-            </div>
-
-            <div className="mt-3 text-xs text-gray-600">
-              End chat limit left: <b>{endsLeft}</b>
-            </div>
+            <p className="mt-3 text-gray-700">{subtitle}</p>
 
             <button
-              className="mt-4 w-full rounded-xl bg-teal-600 py-3 font-medium text-white hover:bg-teal-700 transition"
+              className="mt-6 w-full rounded-2xl bg-gradient-to-br from-teal-500 to-teal-600 py-3 text-white font-medium shadow-md hover:shadow-lg active:scale-[0.98] transition"
               onClick={() => (window.location.href = "/")}
             >
               Back to main page
             </button>
           </div>
         </div>
-
-        <footer className="pb-4 flex justify-center">
-          <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-xs text-gray-700">
-            Hi, Stranger created by Kenjo © 2026
-          </div>
-        </footer>
       </main>
     );
   }
 
-  // Normal chat screen (STABLE)
+  // ====== CHAT SCREEN ======
   return (
-    <main className="h-[100dvh] bg-white flex flex-col">
+    <main className="min-h-screen bg-gradient-to-b from-teal-50 via-white to-white flex flex-col">
       <div className="flex-1 flex items-center justify-center p-3">
-        <div className="w-full max-w-md h-[100dvh] sm:h-auto sm:max-h-[720px] rounded-2xl border border-teal-200 bg-white shadow-sm overflow-hidden flex flex-col">
-
-          {/* Header (compact left/right) */}
-          <div className="px-4 py-3 border-b border-teal-100 bg-teal-50">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-lg font-semibold text-teal-700 leading-tight">
+        <div className="w-full max-w-md h-[100dvh] sm:h-auto sm:max-h-[720px] rounded-3xl bg-white/90 backdrop-blur border border-teal-100 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.25)] overflow-hidden flex flex-col">
+          {/* HEADER */}
+          <div className="px-4 py-3 bg-gradient-to-r from-teal-50 to-teal-100/50 border-b border-teal-100">
+            <div className="flex justify-between items-start">
+              <div>
+                <h1
+                  className="text-2xl sm:text-3xl text-teal-700 tracking-wide"
+                  style={{ fontFamily: "var(--font-chewy)" }}
+                >
                   Hi, Stranger
-                </div>
-                <div className="mt-0.5 text-xs text-gray-600 leading-tight">
+                </h1>
+                <div className="text-xs text-gray-600">
                   {connected ? "Connected" : "Connecting…"}
                 </div>
               </div>
 
-              <div className="flex flex-col items-end gap-1 shrink-0">
+              <div className="text-right">
                 <button
                   onClick={endChat}
                   disabled={ending}
                   className={
                     ending
                       ? "text-xs rounded-xl px-3 py-2 bg-gray-200 text-gray-500 cursor-not-allowed"
-                      : "text-xs rounded-xl px-3 py-2 bg-white border border-teal-200 text-teal-700 hover:bg-teal-100 transition"
+                      : "text-xs rounded-xl px-3 py-2 bg-white/70 border border-teal-200 text-teal-700 hover:bg-white transition"
                   }
                 >
                   {ending ? "Ending…" : "End chat"}
                 </button>
-
-                <div className="text-[11px] text-gray-600 leading-tight">
-                  End chat limit: <b>{endsLeft}</b>
+                <div className="text-[11px] text-gray-600 mt-1">
+                  End limit: <b>{endsLeft}</b>
                 </div>
               </div>
             </div>
 
-            {limitMsg ? (
+            {limitMsg && (
               <div className="mt-2 text-xs text-red-600">{limitMsg}</div>
-            ) : null}
+            )}
           </div>
 
-          {/* Messages scroll area */}
-          <div className="p-4 flex-1 overflow-y-auto bg-white">
+          {/* MESSAGES */}
+          <div className="flex-1 p-4 overflow-y-auto bg-white/70">
             {messages.length === 0 ? (
               <div className="text-sm text-gray-600">
                 Say hi 👋 (No history — messages disappear on refresh.)
               </div>
             ) : (
-              <div className="space-y-3">
-                {messages.map((m) => {
-                  const mine = m.from === userToken;
-                  return (
+              messages.map((m) => {
+                const mine = m.from === userToken;
+                return (
+                  <div
+                    key={m.id}
+                    className={mine ? "flex justify-end" : "flex justify-start"}
+                  >
                     <div
-                      key={m.id}
-                      className={mine ? "flex justify-end" : "flex justify-start"}
+                      className={
+                        mine
+                          ? "max-w-[82%] rounded-3xl bg-gradient-to-br from-teal-500 to-teal-600 text-white px-4 py-2 text-sm shadow-[0_10px_24px_-14px_rgba(13,148,136,0.9)] whitespace-pre-wrap break-words"
+                          : "max-w-[82%] rounded-3xl bg-white text-gray-800 px-4 py-2 text-sm border border-gray-200 shadow-sm whitespace-pre-wrap break-words"
+                      }
                     >
-                      <div
-                        className={
-                          mine
-                            ? "max-w-[80%] rounded-2xl bg-teal-600 text-white px-4 py-2 text-sm whitespace-pre-wrap break-words"
-                            : "max-w-[80%] rounded-2xl bg-gray-100 text-gray-800 px-4 py-2 text-sm whitespace-pre-wrap break-words"
-                        }
-                      >
-                        {m.text}
-                      </div>
+                      {m.text}
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                );
+              })
             )}
 
             {otherTyping ? (
-              <div className="mt-3 text-xs text-gray-600">Stranger is typing…</div>
+              <div className="mt-3 text-xs text-gray-600">
+                Stranger is typing…
+              </div>
             ) : null}
 
             <div ref={bottomRef} />
           </div>
 
-          {/* Composer */}
-          <div className="p-4 border-t border-teal-100 bg-white pb-[calc(env(safe-area-inset-bottom)+16px)]">
+          {/* COMPOSER */}
+          <div className="p-4 border-t border-teal-100 bg-white/90">
             <div className="flex gap-2 items-end">
-              <textarea
-                ref={taRef}
-                value={text}
-                onChange={(e) => handleTextChange(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage();
-                  }
-                }}
-                rows={1}
-                placeholder="Type a message…"
-                className="flex-1 resize-none overflow-y-auto rounded-xl border border-gray-200 px-3 py-2 text-[16px] sm:text-sm outline-none focus:border-teal-300"
-              />
+              <div className="flex-1 rounded-2xl bg-gray-50 border border-gray-200 px-3 py-2">
+                <textarea
+                  ref={taRef}
+                  value={text}
+                  onChange={(e) => handleTextChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      sendMessage();
+                    }
+                  }}
+                  rows={1}
+                  placeholder="Type a message…"
+                  className="w-full bg-transparent resize-none text-[16px] outline-none"
+                />
+              </div>
               <button
                 onClick={sendMessage}
-                disabled={!connected || text.trim().length === 0}
+                disabled={!connected || !text.trim()}
                 className={
-                  connected && text.trim().length > 0
-                    ? "rounded-xl bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 transition"
-                    : "rounded-xl bg-gray-200 px-4 py-2 text-sm font-medium text-gray-500 cursor-not-allowed"
+                  connected && text.trim()
+                    ? "rounded-2xl bg-gradient-to-br from-teal-500 to-teal-600 px-4 py-2 text-white text-sm font-medium shadow-md hover:shadow-lg active:scale-[0.98] transition"
+                    : "rounded-2xl bg-gray-200 px-4 py-2 text-gray-500 text-sm font-medium cursor-not-allowed"
                 }
               >
                 Send
               </button>
             </div>
-
-            <div className="mt-2 text-xs text-gray-600">
-              No photos. No GIFs. Be kind.
-            </div>
           </div>
         </div>
       </div>
-
-      <footer className="pb-4 flex justify-center">
-        <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-xs text-gray-700">
-          Hi, Stranger created by Kenjo © 2026
-        </div>
-      </footer>
     </main>
   );
 }

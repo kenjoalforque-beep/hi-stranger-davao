@@ -47,9 +47,10 @@ export default function Page() {
   const [phTime, setPhTime] = useState("--:--:--");
   const [status, setStatus] = useState<Status>("open");
 
-
   const [iAm, setIAm] = useState<"man" | "woman" | "unspecified" | null>(null);
-  const [lookingFor, setLookingFor] = useState<"men" | "women" | "any" | null>(null);
+  const [lookingFor, setLookingFor] = useState<"men" | "women" | "any" | null>(
+    null
+  );
 
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -74,14 +75,14 @@ export default function Page() {
     }
 
     tick();
-   // loadStatus();
+    // loadStatus();
 
     const clock = setInterval(tick, 1000);
     // const poll = setInterval(loadStatus, 5000);
 
     return () => {
       clearInterval(clock);
-    //  clearInterval(poll);
+      // clearInterval(poll);
     };
   }, []);
 
@@ -93,25 +94,23 @@ export default function Page() {
 
     try {
       const user_token =
-  sessionStorage.getItem("hs_user_token") ??
-  (() => {
-    const t = safeUUID();
-    sessionStorage.setItem("hs_user_token", t);
-    return t;
-  })();
+        sessionStorage.getItem("hs_user_token") ??
+        (() => {
+          const t = safeUUID();
+          sessionStorage.setItem("hs_user_token", t);
+          return t;
+        })();
 
-
-const res = await fetch("/api/join", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  cache: "no-store",
-  body: JSON.stringify({
-    iam: iAm,
-    lookingFor,
-    user_token, // ✅ ADD THIS
-  }),
-});
-
+      const res = await fetch("/api/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          iam: iAm,
+          lookingFor,
+          user_token, // ✅ ADD THIS
+        }),
+      });
 
       const data = await res.json().catch(() => null);
 
@@ -135,7 +134,6 @@ const res = await fetch("/api/join", {
       sessionStorage.setItem("lookingFor", String(lookingFor));
 
       window.location.href = `/wait?qid=${data.queue_id}`;
-
     } catch {
       setJoinError("Something blocked the request. Please try again.");
     } finally {
@@ -143,108 +141,141 @@ const res = await fetch("/api/join", {
     }
   }
 
+  const optionClass =
+    "flex items-center gap-3 rounded-2xl border border-gray-200 bg-white/70 backdrop-blur px-4 py-3 shadow-sm hover:shadow-md hover:border-teal-300 hover:bg-white transition";
+
   return (
-    <main className="min-h-screen bg-white flex flex-col">
+    <main className="min-h-screen bg-gradient-to-b from-teal-50 via-white to-white flex flex-col">
       {/* CENTER CONTENT */}
       <div className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-md rounded-2xl border border-teal-200 bg-white p-6 shadow-sm">
-          <h1 className="text-2xl font-semibold text-teal-600">Hi, Stranger</h1>
+        <div className="w-full max-w-md rounded-3xl bg-white/90 backdrop-blur border border-teal-100 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.25)] p-6">
+          {/* Logo / App name */}
+          <h1
+  className="font-normal text-teal-700 leading-none tracking-wide"
+  style={{
+    fontFamily: "var(--font-chewy)",
+    fontSize: "clamp(3rem, 9vw, 4.5rem)",
+    textShadow: "0 2px 6px rgba(0,0,0,0.08)",
+  }}
+>
+  Hi, Stranger
+</h1>
 
-          <p className="mt-2 text-sm text-gray-700">
+
+
+
+
+          <p className="mt-2 text-sm text-gray-600">
             Anonymous 1-on-1 chat. No history. 9:00–10:00 PM (PH).
           </p>
 
-          <div className="mt-4 rounded-xl border border-teal-200 bg-teal-50 p-3 text-sm text-gray-800">
-            {phDate} {phTime} PH Time
+          {/* Time / status card */}
+          <div className="mt-4 rounded-2xl border border-teal-100 bg-white/70 backdrop-blur p-4 shadow-sm">
+            <div className="text-sm text-gray-800">
+              <span className="font-medium">{phDate}</span>{" "}
+              <span className="font-mono">{phTime}</span>{" "}
+              <span className="text-gray-600">PH Time</span>
+            </div>
+
             <div className="mt-1 text-xs text-gray-600">
               Status:{" "}
-              {status === "open"
-                ? "Open"
-                : status === "entry_closed"
-                ? "Entry closed"
-                : status === "matching_closed"
-                ? "Matching closed"
-                : "Closed"}
+              <span className="font-medium text-teal-700">
+                {status === "open"
+                  ? "Open"
+                  : status === "entry_closed"
+                  ? "Entry closed"
+                  : status === "matching_closed"
+                  ? "Matching closed"
+                  : "Closed"}
+              </span>
             </div>
           </div>
 
-          <p className="mt-5 text-sm font-semibold text-gray-800">I am a…</p>
+          {/* Selections */}
+          <p className="mt-6 text-sm font-semibold text-gray-800">I am a…</p>
 
           <div className="mt-3 space-y-2">
-            <label className="flex items-center gap-3 rounded-xl border border-gray-200 p-3 hover:bg-teal-50 transition">
+            <label className={optionClass}>
               <input
                 type="radio"
                 name="iam"
                 disabled={status !== "open" || joining}
                 onChange={() => setIAm("man")}
+                className="accent-teal-600"
               />
               <span className="text-gray-800">Man</span>
             </label>
 
-            <label className="flex items-center gap-3 rounded-xl border border-gray-200 p-3 hover:bg-teal-50 transition">
+            <label className={optionClass}>
               <input
                 type="radio"
                 name="iam"
                 disabled={status !== "open" || joining}
                 onChange={() => setIAm("woman")}
+                className="accent-teal-600"
               />
               <span className="text-gray-800">Woman</span>
             </label>
 
-            <label className="flex items-center gap-3 rounded-xl border border-gray-200 p-3 hover:bg-teal-50 transition">
+            <label className={optionClass}>
               <input
                 type="radio"
                 name="iam"
                 disabled={status !== "open" || joining}
                 onChange={() => setIAm("unspecified")}
+                className="accent-teal-600"
               />
               <span className="text-gray-800">Prefer not to say</span>
             </label>
           </div>
 
-          <p className="mt-5 text-sm font-semibold text-gray-800">
+          <p className="mt-6 text-sm font-semibold text-gray-800">
             I want to chat with…
           </p>
 
           <div className="mt-3 space-y-2">
-            <label className="flex items-center gap-3 rounded-xl border border-gray-200 p-3 hover:bg-teal-50 transition">
+            <label className={optionClass}>
               <input
                 type="radio"
                 name="lookingFor"
                 disabled={status !== "open" || joining}
                 onChange={() => setLookingFor("men")}
+                className="accent-teal-600"
               />
               <span className="text-gray-800">Men</span>
             </label>
 
-            <label className="flex items-center gap-3 rounded-xl border border-gray-200 p-3 hover:bg-teal-50 transition">
+            <label className={optionClass}>
               <input
                 type="radio"
                 name="lookingFor"
                 disabled={status !== "open" || joining}
                 onChange={() => setLookingFor("women")}
+                className="accent-teal-600"
               />
               <span className="text-gray-800">Women</span>
             </label>
 
-            <label className="flex items-center gap-3 rounded-xl border border-gray-200 p-3 hover:bg-teal-50 transition">
+            <label className={optionClass}>
               <input
                 type="radio"
                 name="lookingFor"
                 disabled={status !== "open" || joining}
                 onChange={() => setLookingFor("any")}
+                className="accent-teal-600"
               />
               <span className="text-gray-800">No preference</span>
             </label>
           </div>
 
+          {/* CTA */}
           <button
             disabled={!ready || joining}
             onClick={handleJoin}
             className={
               ready && !joining
-                ? "mt-4 w-full rounded-xl bg-teal-600 py-3 font-medium text-white hover:bg-teal-700 transition"
-                : "mt-4 w-full rounded-xl bg-gray-200 py-3 font-medium text-gray-500 cursor-not-allowed"
+                ? "mt-5 w-full rounded-2xl bg-gradient-to-br from-teal-500 to-teal-600 py-3 text-white font-medium shadow-md hover:shadow-lg active:scale-[0.98] transition"
+                : "mt-5 w-full rounded-2xl bg-gray-200 py-3 font-medium text-gray-500 cursor-not-allowed"
             }
           >
             {joining
@@ -260,21 +291,22 @@ const res = await fetch("/api/join", {
               : "Come back at 9:00 PM"}
           </button>
 
+          {/* Error */}
           {joinError ? (
-            <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
               {joinError}
             </div>
           ) : null}
 
-          <p className="mt-3 text-xs text-gray-600">
+          <p className="mt-4 text-xs text-gray-600">
             Conversations end at 10:00 PM sharp. Please be kind.
           </p>
         </div>
       </div>
 
       {/* TRUE FOOTER */}
-      <footer className="pb-4 flex justify-center">
-        <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-xs text-gray-700">
+      <footer className="pb-5 flex justify-center">
+        <div className="rounded-2xl border border-teal-100 bg-white/70 backdrop-blur px-4 py-2 text-xs text-gray-700 shadow-sm">
           Hi, Stranger created by Kenjo © 2026
         </div>
       </footer>
