@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-type Status = "open" | "entry_closed" | "matching_closed" | "closed";
+type Status = "open" | "entry_closed" | "closed";
 
 function getPhilippineNowParts() {
   const now = new Date();
@@ -234,16 +234,18 @@ export default function Page() {
       const data = await res.json().catch(() => null);
 
       if (!res.ok || !data?.ok) {
+        
         const msg =
-          data?.error === "entry_closed"
-            ? "Entry is closed for tonight."
-            : data?.error === "matching_closed"
-            ? "Matching is closed for tonight."
-            : data?.error === "closed"
-            ? "Come back at 9:00 PM."
-            : data?.error === "invalid_payload"
-            ? "Please select both options."
-            : "Something went wrong. Please try again.";
+  data?.error === "entry_closed"
+    ? "Matching is now closed for tonight."
+    : data?.error === "closed"
+    ? "Come back at 9:00 PM."
+    : data?.error === "invalid_payload"
+    ? "Please select both options."
+    : "Something went wrong. Please try again.";
+
+
+
         setJoinError(msg);
         return;
       }
@@ -332,8 +334,6 @@ export default function Page() {
   {status === "open"
     ? "Open"
     : status === "entry_closed"
-    ? "Entry closed"
-    : status === "matching_closed"
     ? "Matching closed"
     : "Closed"}
 </span>
@@ -438,17 +438,25 @@ export default function Page() {
             }
           >
             {joining
-              ? "Joining…"
-              : ready
-              ? "Find a Stranger"
-              : status === "open"
-              ? "Select your options to continue"
-              : status === "entry_closed"
-              ? "Entry closed for tonight"
-              : status === "matching_closed"
-              ? "Matching closed"
-              : "Come back at 9:00 PM"}
-          </button>
+  ? "Joining…"
+  : status === "open" && ready
+  ? "Find a Stranger"
+  : status === "open"
+  ? "Select your options to continue"
+  : status === "entry_closed"
+  ? "Matching is now closed for tonight"
+  : "Come back at 9:00 PM"}
+
+</button>
+
+          {!joining && status === "entry_closed" && (
+  <p className="mt-3 text-sm text-gray-700 text-center">
+    Please come back tomorrow to find a match.
+  </p>
+)}
+
+
+
 
           {joinError ? (
             <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">

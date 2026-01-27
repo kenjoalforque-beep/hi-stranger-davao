@@ -22,8 +22,16 @@ export async function POST(req: Request) {
   const room_id = body?.room_id;
   const user_token = body?.user_token;
 
+  // ✅ NEW: mode controls whether this counts toward the nightly self-end limit
+  // "user"  = user clicked End chat (counts + enforces limit)
+  // "system" = auto-close at 10PM (does NOT count, does NOT enforce limit)
+  const mode: "user" | "system" = body?.mode === "system" ? "system" : "user";
+
   if (!isUuid(room_id) || !isUuid(user_token)) {
-    return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, error: "invalid_payload" },
+      { status: 400 }
+    );
   }
 
   const admin = supabaseAdmin();
@@ -36,11 +44,18 @@ export async function POST(req: Request) {
     .maybeSingle();
 
   if (roomRes.error) {
-    return NextResponse.json({ ok: false, error: "db_error", details: roomRes.error.message }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: "db_error", details: roomRes.error.message },
+      { status: 500 }
+    );
   }
 
   const room = roomRes.data;
-  if (!room) return NextResponse.json({ ok: false, error: "room_not_found" }, { status: 404 });
+  if (!room)
+    return NextResponse.json(
+      { ok: false, error: "room_not_found" },
+      { status: 404 }
+    );
 
   if (room.ended_at) {
     return NextResponse.json({ ok: true, ended: true });
@@ -53,7 +68,10 @@ export async function POST(req: Request) {
     .in("id", [room.a_queue_id, room.b_queue_id]);
 
   if (qRes.error) {
-    return NextResponse.json({ ok: false, error: "db_error", details: qRes.error.message }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: "db_error", details: qRes.error.message },
+      { status: 500 }
+    );
   }
 
   const rows = qRes.data ?? [];
@@ -68,7 +86,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "not_in_room" }, { status: 403 });
   }
 
-  // 3) Read current per-night count WITHOUT resetting it
+  // ✅ SYSTEM MODE: end the room WITHOUT touching night_limits
+  if (mode === "system") {
+    const endRes = await admin
+      .from("rooms")
+      .update({
+        ended_at: new Date().toISOString(),
+        ended_by_token: user_token,
+        ended_by_side: side,
+      })
+      .eq("id", room_id);
+
+    if (endRes.error) {
+      return NextResponse.json(
+        { ok: false, error: "db_error", details: endRes.error.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ ok: true, ended: true, mode: "system" });
+  }
+
+  // 3) USER MODE: Read current per-night count WITHOUT resetting it
   const night_date = philippineDateISO();
 
   const readRes = await admin
@@ -79,7 +118,10 @@ export async function POST(req: Request) {
     .maybeSingle();
 
   if (readRes.error) {
-    return NextResponse.json({ ok: false, error: "db_error", details: readRes.error.message }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: "db_error", details: readRes.error.message },
+      { status: 500 }
+    );
   }
 
   let currentCount = Number(readRes.data?.self_end_count ?? 0);
@@ -91,7 +133,10 @@ export async function POST(req: Request) {
       .insert({ user_token, night_date, self_end_count: 0 });
 
     if (ins.error) {
-      return NextResponse.json({ ok: false, error: "db_error", details: ins.error.message }, { status: 500 });
+      return NextResponse.json(
+        { ok: false, error: "db_error", details: ins.error.message },
+        { status: 500 }
+      );
     }
 
     currentCount = 0;
@@ -112,7 +157,10 @@ export async function POST(req: Request) {
     .eq("id", room_id);
 
   if (endRes.error) {
-    return NextResponse.json({ ok: false, error: "db_error", details: endRes.error.message }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: "db_error", details: endRes.error.message },
+      { status: 500 }
+    );
   }
 
   // 5) Increment per-night count
@@ -125,8 +173,11 @@ export async function POST(req: Request) {
     .eq("night_date", night_date);
 
   if (incRes.error) {
-    return NextResponse.json({ ok: false, error: "db_error", details: incRes.error.message }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: "db_error", details: incRes.error.message },
+      { status: 500 }
+    );
   }
 
-  return NextResponse.json({ ok: true, ended: true, self_end_count: newCount, night_date });
+  return NextResponse.json({ ok: true, ended: true, self_end_count: newCount, night_date, mode: "user" });
 }

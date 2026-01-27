@@ -556,7 +556,7 @@ export default function RoomPage() {
     const subtitle =
       endedReason === "system"
         ? "Thank you for chatting tonight. See you tomorrow."
-        : "Try to find another partner.";
+        : "Try to find a new match.";
 
 
     return (
