@@ -625,12 +625,12 @@ export default function RoomPage() {
             )}
           </div>
 
-          {/* MESSAGES */}
-          <div
-          <div
+{/* MESSAGES */}
+<div
   ref={listRef}
   className="flex-1 min-h-0 p-4 overflow-y-auto bg-white/70"
 >
+
 
             {messages.length === 0 ? (
               <div className="text-sm text-gray-600">Say hi 👋</div>
