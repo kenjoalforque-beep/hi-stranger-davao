@@ -578,7 +578,8 @@ export default function RoomPage() {
     <main className="min-h-screen bg-teal-600 flex flex-col">
       {/* Chat area */}
       <div className="flex-1 flex items-center justify-center p-3">
-<div className="w-full max-w-md flex-1 sm:flex-none sm:h-auto sm:max-h-[720px] min-h-0 rounded-3xl bg-white/90 backdrop-blur border border-teal-100 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.25)] overflow-hidden flex flex-col">
+<div className="w-full max-w-md h-[100dvh] sm:h-[720px] rounded-3xl bg-white/90 backdrop-blur border border-teal-100 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.25)] overflow-hidden flex flex-col">
+
 
           {/* HEADER */}
           <div className="px-4 py-3 bg-gradient-to-r from-teal-50 to-teal-100/50 border-b border-teal-100">
