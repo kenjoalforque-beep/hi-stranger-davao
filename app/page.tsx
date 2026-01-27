@@ -100,7 +100,17 @@ function safeUUID() {
 function isIOS() {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent || "";
-  return /iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream;
+
+  // Classic iOS devices
+  const classic = /iPad|iPhone|iPod/.test(ua);
+
+  // iPadOS sometimes reports as Mac; detect touch-capable Mac UA
+  const iPadOS =
+    ua.includes("Mac") &&
+    typeof document !== "undefined" &&
+    "ontouchend" in document;
+
+  return (classic || iPadOS) && !(window as any).MSStream;
 }
 
 function isAndroid() {
@@ -109,8 +119,6 @@ function isAndroid() {
 }
 
 function isInStandaloneMode() {
-  // iOS Safari: navigator.standalone
-  // Others: display-mode: standalone
   return (
     (typeof window !== "undefined" &&
       (window.matchMedia?.("(display-mode: standalone)")?.matches ?? false)) ||
@@ -137,6 +145,7 @@ export default function Page() {
   // ---- Install-as-app state ----
   const [showInstall, setShowInstall] = useState(false);
   const [iosInstallOpen, setIosInstallOpen] = useState(false);
+  const [androidInstallOpen, setAndroidInstallOpen] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   // --------------------------------
 
@@ -178,26 +187,23 @@ export default function Page() {
 
   // Install-as-app hooks
   useEffect(() => {
-  if (isInStandaloneMode()) {
-    setShowInstall(false);
-    return;
-  }
+    if (isInStandaloneMode()) {
+      setShowInstall(false);
+      return;
+    }
 
-  // Always show button on iOS + Android (with fallback instructions)
-  if (isIOS() || isAndroid()) {
-    setShowInstall(true);
-  }
+    // Show button on iOS + Android
+    if (isIOS() || isAndroid()) setShowInstall(true);
 
-  const handler = (e: any) => {
-    e.preventDefault();
-    setDeferredPrompt(e);
-    setShowInstall(true);
-  };
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstall(true);
+    };
 
-  window.addEventListener("beforeinstallprompt", handler);
-  return () => window.removeEventListener("beforeinstallprompt", handler);
-}, []);
-
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
 
   async function handleJoin() {
     if (!ready || joining) return;
@@ -254,28 +260,36 @@ export default function Page() {
   }
 
   async function handleInstallClick() {
-    // Already installed? do nothing
     if (isInStandaloneMode()) return;
 
+    // iOS -> show iOS steps ONLY
     if (isIOS()) {
       setIosInstallOpen(true);
+      setAndroidInstallOpen(false);
       return;
     }
 
-    // Android/Chrome path
-    if (deferredPrompt) {
-      try {
-        deferredPrompt.prompt();
-        await deferredPrompt.userChoice?.catch(() => null);
-      } catch {}
-      // After prompting, typically it won’t fire again; hide button
-      setDeferredPrompt(null);
-      setShowInstall(false);
+    // Android -> try native prompt, else show Android steps
+    if (isAndroid()) {
+      if (deferredPrompt) {
+        try {
+          deferredPrompt.prompt();
+          await deferredPrompt.userChoice?.catch(() => null);
+        } catch {}
+        setDeferredPrompt(null);
+        // Hide button if they installed; but we can't be sure -> keep it simple
+        return;
+      }
+
+      // Fallback: show Android instructions (NOT iOS)
+      setAndroidInstallOpen(true);
+      setIosInstallOpen(false);
       return;
     }
 
-    // Fallback (no prompt available): show a gentle note
-    setIosInstallOpen(true);
+    // Other platforms: do nothing / optional message
+    setIosInstallOpen(false);
+    setAndroidInstallOpen(false);
   }
 
   const optionClass =
@@ -300,7 +314,6 @@ export default function Page() {
             Anonymous 1-on-1 chat. No history. 9:00–10:00 PM (PH).
           </p>
 
-          {/* ✅ Time / Status card */}
           <div className="mt-4 rounded-2xl border border-teal-100 bg-white/70 backdrop-blur p-4 shadow-sm">
             <div className="text-sm text-gray-800">
               <span className="font-medium">{phDate}</span>{" "}
@@ -480,6 +493,35 @@ export default function Page() {
             <button
               className="mt-4 w-full rounded-2xl bg-teal-600 py-2.5 text-white text-sm font-medium hover:bg-teal-700 transition"
               onClick={() => setIosInstallOpen(false)}
+              type="button"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Android instructions popup */}
+      {androidInstallOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3">
+          <div
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setAndroidInstallOpen(false)}
+          />
+          <div className="relative w-full max-w-md rounded-3xl bg-white p-5 shadow-xl border border-gray-100">
+            <div className="text-sm font-semibold text-gray-900">
+              To install this app on Android:
+            </div>
+
+            <ol className="mt-3 text-sm text-gray-700 list-decimal pl-5 space-y-2">
+              <li>Open this page in Chrome.</li>
+              <li>Tap the ⋮ menu (top-right).</li>
+              <li>Select “Add to Home screen” (or “Install app”).</li>
+            </ol>
+
+            <button
+              className="mt-4 w-full rounded-2xl bg-teal-600 py-2.5 text-white text-sm font-medium hover:bg-teal-700 transition"
+              onClick={() => setAndroidInstallOpen(false)}
               type="button"
             >
               Got it
