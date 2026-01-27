@@ -464,7 +464,7 @@ export default function Page() {
         {showInstall && (
           <button
             onClick={handleInstallClick}
-            className="text-[11px] text-teal-700 hover:text-teal-800 underline underline-offset-4"
+            className="text-[11px] text-white/90 hover:text-white underline underline-offset-4"
             type="button"
           >
             Install as App
