@@ -150,8 +150,22 @@ export default function RoomPage() {
   const otherTypingTimer = useRef<any>(null);
   const myTypingTimer = useRef<any>(null);
 
-  const bottomRef = useRef<HTMLDivElement | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // ✅ NEW: message list ref + sticky-to-bottom behavior
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const stickToBottomRef = useRef(true);
+
+  function isNearBottom(el: HTMLDivElement) {
+    const threshold = 140; // px
+    return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
+  }
+
+  function scrollToBottom(behavior: ScrollBehavior = "auto") {
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+  }
 
   // --- local message persistence (refresh-safe, cleared only on End Chat) ---
   const storageKey = useMemo(
@@ -252,9 +266,49 @@ export default function RoomPage() {
     el.style.height = Math.min(el.scrollHeight, 96) + "px";
   }
 
+  // ✅ NEW: keep sticky flag updated when user scrolls
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const el = listRef.current;
+    if (!el) return;
+
+    const onScroll = () => {
+      stickToBottomRef.current = isNearBottom(el);
+    };
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+    // initialize
+    stickToBottomRef.current = isNearBottom(el);
+
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // ✅ NEW: auto-scroll ONLY if user is already near bottom
+  useEffect(() => {
+    if (!listRef.current) return;
+    if (!stickToBottomRef.current) return;
+
+    // next frame ensures DOM has the new bubble height
+    requestAnimationFrame(() => scrollToBottom("auto"));
   }, [messages.length]);
+
+  // ✅ NEW: when mobile keyboard opens/closes, keep bottom visible if sticky
+  useEffect(() => {
+    const vv = (window as any).visualViewport as VisualViewport | undefined;
+    if (!vv) return;
+
+    const handler = () => {
+      if (stickToBottomRef.current) {
+        requestAnimationFrame(() => scrollToBottom("auto"));
+      }
+    };
+
+    vv.addEventListener("resize", handler);
+    vv.addEventListener("scroll", handler);
+    return () => {
+      vv.removeEventListener("resize", handler);
+      vv.removeEventListener("scroll", handler);
+    };
+  }, []);
 
   // ====== REALTIME LOGIC ======
   useEffect(() => {
@@ -397,10 +451,16 @@ export default function RoomPage() {
       ts: Date.now(),
     };
 
+    // If I'm sending, always stick to bottom
+    stickToBottomRef.current = true;
+
     setMessages((prev) => [...prev, msg]);
     setText("");
     sendTyping(false);
-    requestAnimationFrame(autosizeTextarea);
+    requestAnimationFrame(() => {
+      autosizeTextarea();
+      scrollToBottom("auto");
+    });
 
     await ch.send({ type: "broadcast", event: "message", payload: msg });
   }
@@ -483,7 +543,7 @@ export default function RoomPage() {
         : "Thank you for chatting tonight. See you tomorrow.";
 
     return (
-<main className="min-h-screen bg-teal-600 flex flex-col">
+      <main className="min-h-screen bg-teal-600 flex flex-col">
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="w-full max-w-md rounded-3xl bg-white/90 backdrop-blur border border-teal-100 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.25)] p-6">
             <h1
@@ -504,7 +564,6 @@ export default function RoomPage() {
           </div>
         </div>
 
-        {/* Footer on end screen too */}
         <footer className="pb-5 flex justify-center">
           <div className="rounded-2xl border border-teal-100 bg-white/70 backdrop-blur px-4 py-2 text-xs text-gray-700 shadow-sm">
             Hi, Stranger created by Kenjo © 2026
@@ -516,7 +575,7 @@ export default function RoomPage() {
 
   // ====== CHAT SCREEN ======
   return (
-<main className="min-h-screen bg-teal-600 flex flex-col">
+    <main className="min-h-screen bg-teal-600 flex flex-col">
       {/* Chat area */}
       <div className="flex-1 flex items-center justify-center p-3">
         <div className="w-full max-w-md flex-1 sm:flex-none sm:h-auto sm:max-h-[720px] rounded-3xl bg-white/90 backdrop-blur border border-teal-100 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.25)] overflow-hidden flex flex-col">
@@ -566,7 +625,10 @@ export default function RoomPage() {
           </div>
 
           {/* MESSAGES */}
-          <div className="flex-1 p-4 overflow-y-auto bg-white/70">
+          <div
+            ref={listRef}
+            className="flex-1 p-4 overflow-y-auto bg-white/70"
+          >
             {messages.length === 0 ? (
               <div className="text-sm text-gray-600">Say hi 👋</div>
             ) : (
@@ -574,10 +636,9 @@ export default function RoomPage() {
                 const mine = m.from === userToken;
                 return (
                   <div
-  key={m.id}
-  className={`${mine ? "flex justify-end" : "flex justify-start"} mb-1.5`}
->
-
+                    key={m.id}
+                    className={`${mine ? "flex justify-end" : "flex justify-start"} mb-1.5`}
+                  >
                     <div
                       className={
                         mine
@@ -597,8 +658,6 @@ export default function RoomPage() {
                 Stranger is typing…
               </div>
             ) : null}
-
-            <div ref={bottomRef} />
           </div>
 
           {/* COMPOSER */}
@@ -609,6 +668,12 @@ export default function RoomPage() {
                   ref={taRef}
                   value={text}
                   onChange={(e) => handleTextChange(e.target.value)}
+                  onFocus={() => {
+                    // When keyboard opens, keep last message visible (if user is sticky)
+                    if (stickToBottomRef.current) {
+                      requestAnimationFrame(() => scrollToBottom("auto"));
+                    }
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
