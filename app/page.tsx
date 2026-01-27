@@ -69,14 +69,12 @@ function msToHMS(ms: number) {
 }
 
 function getNext9pmCountdownMs() {
-  // Manila is UTC+8 (no DST). We'll build a target "9:00 PM Manila" in UTC.
   const now = new Date();
   const p = getPhilippineNowParts();
 
   // Target today 21:00 Manila => 13:00 UTC
   let targetUTC = Date.UTC(p.y, p.m - 1, p.d, 13, 0, 0);
 
-  // If already past 9:00 PM Manila, target is tomorrow 9:00 PM
   const nowManilaTotalSeconds = p.hh * 3600 + p.mm * 60 + p.ss;
   const ninePMSeconds = 21 * 3600;
 
@@ -99,11 +97,26 @@ function safeUUID() {
   return `x_${Math.random().toString(16).slice(2)}_${Date.now()}`;
 }
 
+function isIOS() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream;
+}
+
+function isInStandaloneMode() {
+  // iOS Safari: navigator.standalone
+  // Others: display-mode: standalone
+  return (
+    (typeof window !== "undefined" &&
+      (window.matchMedia?.("(display-mode: standalone)")?.matches ?? false)) ||
+    ((navigator as any)?.standalone === true)
+  );
+}
+
 export default function Page() {
   const [phDate, setPhDate] = useState("");
   const [phTime, setPhTime] = useState("--:--:--");
   const [status, setStatus] = useState<Status>("closed"); // ✅ default CLOSED
-
   const [countdown, setCountdown] = useState<string>("");
 
   const [iAm, setIAm] = useState<"man" | "woman" | "unspecified" | null>(null);
@@ -115,6 +128,12 @@ export default function Page() {
   const [joinError, setJoinError] = useState<string | null>(null);
 
   const ready = status === "open" && iAm !== null && lookingFor !== null;
+
+  // ---- Install-as-app state ----
+  const [showInstall, setShowInstall] = useState(false);
+  const [iosInstallOpen, setIosInstallOpen] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  // --------------------------------
 
   useEffect(() => {
     function tick() {
@@ -151,6 +170,31 @@ export default function Page() {
       clearInterval(poll);
     };
   }, [status]);
+
+  // Install-as-app hooks
+  useEffect(() => {
+    // If already installed, hide
+    if (isInStandaloneMode()) {
+      setShowInstall(false);
+      return;
+    }
+
+    // iOS: show install button (we'll show instructions)
+    if (isIOS()) {
+      setShowInstall(true);
+      return;
+    }
+
+    // Android/others: wait for beforeinstallprompt to decide
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstall(true);
+    };
+
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
 
   async function handleJoin() {
     if (!ready || joining) return;
@@ -204,6 +248,31 @@ export default function Page() {
     } finally {
       setJoining(false);
     }
+  }
+
+  async function handleInstallClick() {
+    // Already installed? do nothing
+    if (isInStandaloneMode()) return;
+
+    if (isIOS()) {
+      setIosInstallOpen(true);
+      return;
+    }
+
+    // Android/Chrome path
+    if (deferredPrompt) {
+      try {
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice?.catch(() => null);
+      } catch {}
+      // After prompting, typically it won’t fire again; hide button
+      setDeferredPrompt(null);
+      setShowInstall(false);
+      return;
+    }
+
+    // Fallback (no prompt available): show a gentle note
+    setIosInstallOpen(true);
   }
 
   const optionClass =
@@ -371,11 +440,50 @@ export default function Page() {
         </div>
       </div>
 
-      <footer className="pb-5 flex justify-center">
+      <footer className="pb-5 flex flex-col items-center gap-2">
         <div className="rounded-2xl border border-teal-100 bg-white/70 backdrop-blur px-4 py-2 text-xs text-gray-700 shadow-sm">
           Hi, Stranger created by Kenjo © 2026
         </div>
+
+        {showInstall && (
+          <button
+            onClick={handleInstallClick}
+            className="text-[11px] text-teal-700 hover:text-teal-800 underline underline-offset-4"
+            type="button"
+          >
+            Install as App
+          </button>
+        )}
       </footer>
+
+      {/* iOS instructions popup */}
+      {iosInstallOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3">
+          <div
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setIosInstallOpen(false)}
+          />
+          <div className="relative w-full max-w-md rounded-3xl bg-white p-5 shadow-xl border border-gray-100">
+            <div className="text-sm font-semibold text-gray-900">
+              To install this app on your iOS:
+            </div>
+
+            <ol className="mt-3 text-sm text-gray-700 list-decimal pl-5 space-y-2">
+              <li>Tap the Share button at the bottom of Safari browser.</li>
+              <li>Select Add to Home Screen.</li>
+              <li>Tap Add.</li>
+            </ol>
+
+            <button
+              className="mt-4 w-full rounded-2xl bg-teal-600 py-2.5 text-white text-sm font-medium hover:bg-teal-700 transition"
+              onClick={() => setIosInstallOpen(false)}
+              type="button"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
