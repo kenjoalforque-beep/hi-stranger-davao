@@ -574,9 +574,10 @@ export default function RoomPage() {
                 const mine = m.from === userToken;
                 return (
                   <div
-                    key={m.id}
-                    className={mine ? "flex justify-end" : "flex justify-start"}
-                  >
+  key={m.id}
+  className={`${mine ? "flex justify-end" : "flex justify-start"} mb-1.5`}
+>
+
                     <div
                       className={
                         mine
