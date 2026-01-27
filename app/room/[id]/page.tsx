@@ -144,6 +144,17 @@ export default function RoomPage() {
   const [endedReason, setEndedReason] =
     useState<"you" | "other" | "system">("system");
 
+  // ✅ Prevent multiple end triggers from overwriting the end reason
+  const endLockedRef = useRef(false);
+
+  function endOnce(reason: "you" | "other" | "system") {
+    if (endLockedRef.current) return;
+    endLockedRef.current = true;
+    setEndedReason(reason);
+    setEnded(true);
+  }
+
+
   const [limitMsg, setLimitMsg] = useState<string>("");
   const [endsLeft, setEndsLeft] = useState<number>(2);
 
@@ -245,8 +256,8 @@ export default function RoomPage() {
               } catch {}
             }
 
-            setEndedReason("system");
-            setEnded(true);
+                        endOnce("system");
+
           }
         })();
       }
@@ -351,8 +362,8 @@ export default function RoomPage() {
 
     ch.on("broadcast", { event: "end" }, () => {
       clearLocalHistory();
-      setEndedReason("other");
-      setEnded(true);
+            endOnce("other");
+
     });
 
     ch.subscribe((status: any) => {
@@ -385,8 +396,8 @@ export default function RoomPage() {
 
         if (data?.ended_at) {
           clearLocalHistory();
-          setEndedReason("system");
-          setEnded(true);
+                      endOnce("system");
+
         }
       } catch {}
     }, 2000);
@@ -524,8 +535,8 @@ export default function RoomPage() {
         });
       }
 
-      setEndedReason("you");
-      setEnded(true);
+           endOnce("you");
+
       setEnding(false);
     } catch (e: any) {
       setLimitMsg(`End failed: network/error (${String(e?.message || e)})`);
@@ -534,13 +545,19 @@ export default function RoomPage() {
   }
 
   // ====== END SCREEN ======
-  if (ended) {
-    const subtitle =
+    if (ended) {
+    const title =
       endedReason === "you"
-        ? "You ended the chat."
+        ? "You have ended the chat."
         : endedReason === "other"
-        ? "The stranger ended the chat."
-        : "Thank you for chatting tonight. See you tomorrow.";
+        ? "Stranger has ended the chat."
+        : "Chat has ended.";
+
+    const subtitle =
+      endedReason === "system"
+        ? "Thank you for chatting tonight. See you tomorrow."
+        : "Try to find another partner.";
+
 
     return (
       <main className="min-h-screen bg-teal-600 flex flex-col">
@@ -553,7 +570,8 @@ export default function RoomPage() {
               Hi, Stranger
             </h1>
 
-            <p className="mt-3 text-gray-700">{subtitle}</p>
+<p className="mt-3 text-gray-800 font-medium">{title}</p>
+<p className="mt-2 text-gray-700">{subtitle}</p>
 
             <button
               className="mt-6 w-full rounded-2xl bg-gradient-to-br from-teal-500 to-teal-600 py-3 text-white font-medium shadow-md hover:shadow-lg active:scale-[0.98] transition"
