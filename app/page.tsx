@@ -516,7 +516,7 @@ export default function Page() {
             <ol className="mt-3 text-sm text-gray-700 list-decimal pl-5 space-y-2">
               <li>Open this page in Chrome.</li>
               <li>Tap the ⋮ menu (top-right).</li>
-              <li>Select “Add to Home screen” then “Install").</li>
+              <li>Select “Add to Home screen” then “Install".</li>
             </ol>
 
             <button
