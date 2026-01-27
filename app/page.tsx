@@ -324,23 +324,29 @@ export default function Page() {
             <div className="mt-1 text-xs text-gray-600 flex items-center gap-2 flex-wrap">
               <span>
                 Status:{" "}
-                <span className="font-medium text-teal-700">
-                  {status === "open"
-                    ? "Open"
-                    : status === "entry_closed"
-                    ? "Entry closed"
-                    : status === "matching_closed"
-                    ? "Matching closed"
-                    : "Closed"}
-                </span>
+                <span
+  className={`font-medium ${
+    status === "closed" ? "text-red-600" : "text-teal-700"
+  }`}
+>
+  {status === "open"
+    ? "Open"
+    : status === "entry_closed"
+    ? "Entry closed"
+    : status === "matching_closed"
+    ? "Matching closed"
+    : "Closed"}
+</span>
+
               </span>
 
               {status === "closed" && (
                 <span className="text-gray-500">
                   · Opens in{" "}
-                  <span className="font-mono font-semibold text-teal-700">
-                    {countdown || "--:--:--"}
-                  </span>
+                  <span className="font-mono font-semibold text-red-600">
+  {countdown || "--:--:--"}
+</span>
+
                 </span>
               )}
             </div>
