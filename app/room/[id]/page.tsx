@@ -65,7 +65,7 @@ function getUserToken() {
   return t;
 }
 
-// ---------- NEW: Manila time helpers (client-safe) ----------
+// ---------- Manila time helpers (client-safe) ----------
 function getManilaNowParts() {
   const now = new Date();
 
@@ -159,7 +159,6 @@ export default function RoomPage() {
     [roomId]
   );
 
-  // Restore on room load
   useEffect(() => {
     if (!roomId) return;
     try {
@@ -172,7 +171,6 @@ export default function RoomPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
-  // Save whenever messages change
   useEffect(() => {
     if (!roomId) return;
     try {
@@ -188,8 +186,8 @@ export default function RoomPage() {
   }
   // ---------------------------------------------------------------------------
 
-  // ---------- NEW: banner countdown + auto system-end at 10PM ----------
-  const [closeBanner, setCloseBanner] = useState<string>(""); // "05:00"
+  // ---------- banner countdown + auto system-end at 10PM ----------
+  const [closeBanner, setCloseBanner] = useState<string>("");
   const autoEndedRef = useRef(false);
 
   useEffect(() => {
@@ -198,18 +196,15 @@ export default function RoomPage() {
     function tick() {
       const msLeft = getMsUntilManila10pm();
 
-      // banner only in last 5 minutes (and before auto-end)
       if (msLeft > 0 && msLeft <= 5 * 60 * 1000) {
         setCloseBanner(msToMMSS(msLeft));
       } else {
         setCloseBanner("");
       }
 
-      // auto-end at 10pm
       if (msLeft <= 0 && !autoEndedRef.current) {
         autoEndedRef.current = true;
 
-        // fire and forget (but still safe)
         (async () => {
           try {
             await fetch("/api/end", {
@@ -219,14 +214,12 @@ export default function RoomPage() {
               body: JSON.stringify({
                 room_id: roomId,
                 user_token: userToken,
-                mode: "system", // ✅ does not consume the 2 self-end limit
+                mode: "system",
               }),
             }).catch(() => null);
           } finally {
-            // clear local history (END is the only wipe trigger)
             clearLocalHistory();
 
-            // notify other user immediately
             const ch = chRef.current;
             if (ch) {
               try {
@@ -263,7 +256,7 @@ export default function RoomPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length]);
 
-  // ====== REALTIME LOGIC (UNCHANGED) ======
+  // ====== REALTIME LOGIC ======
   useEffect(() => {
     if (!roomId) return;
 
@@ -302,7 +295,6 @@ export default function RoomPage() {
       }
     });
 
-    // Other user ended -> clear local history too (end is the only wipe trigger)
     ch.on("broadcast", { event: "end" }, () => {
       clearLocalHistory();
       setEndedReason("other");
@@ -427,7 +419,7 @@ export default function RoomPage() {
         body: JSON.stringify({
           room_id: roomId,
           user_token: userToken,
-          mode: "user", // ✅ explicit (counts toward limit)
+          mode: "user",
         }),
       });
 
@@ -461,7 +453,6 @@ export default function RoomPage() {
       const left = Math.max(0, 2 - count);
       setEndsLeft(left);
 
-      // ✅ Clear local history ONLY when chat ends
       clearLocalHistory();
 
       const ch = chRef.current;
@@ -482,7 +473,7 @@ export default function RoomPage() {
     }
   }
 
-  // ====== END SCREEN (UI ONLY) ======
+  // ====== END SCREEN ======
   if (ended) {
     const subtitle =
       endedReason === "you"
@@ -512,6 +503,13 @@ export default function RoomPage() {
             </button>
           </div>
         </div>
+
+        {/* Footer on end screen too */}
+        <footer className="pb-5 flex justify-center">
+          <div className="rounded-2xl border border-teal-100 bg-white/70 backdrop-blur px-4 py-2 text-xs text-gray-700 shadow-sm">
+            Hi, Stranger created by Kenjo © 2026
+          </div>
+        </footer>
       </main>
     );
   }
@@ -519,8 +517,9 @@ export default function RoomPage() {
   // ====== CHAT SCREEN ======
   return (
     <main className="min-h-screen bg-gradient-to-b from-teal-50 via-white to-white flex flex-col">
+      {/* Chat area */}
       <div className="flex-1 flex items-center justify-center p-3">
-        <div className="w-full max-w-md h-[100dvh] sm:h-auto sm:max-h-[720px] rounded-3xl bg-white/90 backdrop-blur border border-teal-100 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.25)] overflow-hidden flex flex-col">
+        <div className="w-full max-w-md flex-1 sm:flex-none sm:h-auto sm:max-h-[720px] rounded-3xl bg-white/90 backdrop-blur border border-teal-100 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.25)] overflow-hidden flex flex-col">
           {/* HEADER */}
           <div className="px-4 py-3 bg-gradient-to-r from-teal-50 to-teal-100/50 border-b border-teal-100">
             <div className="flex justify-between items-start">
@@ -554,7 +553,6 @@ export default function RoomPage() {
               </div>
             </div>
 
-            {/* ✅ NEW: close banner (only last 5 minutes) */}
             {closeBanner ? (
               <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex items-center justify-between">
                 <span>Chatroom will close in</span>
@@ -636,6 +634,13 @@ export default function RoomPage() {
           </div>
         </div>
       </div>
+
+      {/* Footer (always visible) */}
+      <footer className="pb-5 flex justify-center">
+        <div className="rounded-2xl border border-teal-100 bg-white/70 backdrop-blur px-4 py-2 text-xs text-gray-700 shadow-sm">
+          Hi, Stranger created by Kenjo © 2026
+        </div>
+      </footer>
     </main>
   );
 }
