@@ -311,7 +311,7 @@ export default function Page() {
           </h1>
 
           <p className="mt-2 text-sm text-gray-600">
-            Anonymous 1-on-1 chat. No history. 9:00–10:00 PM (PH).
+            Anonymous 1-on-1 chat. No history.
           </p>
 
           <div className="mt-4 rounded-2xl border border-teal-100 bg-white/70 backdrop-blur p-4 shadow-sm">
