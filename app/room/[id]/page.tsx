@@ -483,7 +483,7 @@ export default function RoomPage() {
         : "Thank you for chatting tonight. See you tomorrow.";
 
     return (
-      <main className="min-h-screen bg-gradient-to-b from-teal-50 via-white to-white flex flex-col">
+<main className="min-h-screen bg-teal-600 flex flex-col">
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="w-full max-w-md rounded-3xl bg-white/90 backdrop-blur border border-teal-100 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.25)] p-6">
             <h1
@@ -516,7 +516,7 @@ export default function RoomPage() {
 
   // ====== CHAT SCREEN ======
   return (
-    <main className="min-h-screen bg-gradient-to-b from-teal-50 via-white to-white flex flex-col">
+<main className="min-h-screen bg-teal-600 flex flex-col">
       {/* Chat area */}
       <div className="flex-1 flex items-center justify-center p-3">
         <div className="w-full max-w-md flex-1 sm:flex-none sm:h-auto sm:max-h-[720px] rounded-3xl bg-white/90 backdrop-blur border border-teal-100 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.25)] overflow-hidden flex flex-col">
