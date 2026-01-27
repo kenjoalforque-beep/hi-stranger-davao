@@ -51,7 +51,6 @@ function uuid() {
   return "00000000-0000-4000-8000-000000000000";
 }
 
-
 function getUserToken() {
   const key = "hs_user_token";
   const existing = sessionStorage.getItem(key);
@@ -65,6 +64,66 @@ function getUserToken() {
   sessionStorage.setItem(key, t);
   return t;
 }
+
+// ---------- NEW: Manila time helpers (client-safe) ----------
+function getManilaNowParts() {
+  const now = new Date();
+
+  const tf = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+
+  const tp = tf.formatToParts(now).reduce<Record<string, string>>((a, p) => {
+    if (p.type !== "literal") a[p.type] = p.value;
+    return a;
+  }, {});
+
+  const hh = Number(tp.hour ?? "0");
+  const mm = Number(tp.minute ?? "0");
+  const ss = Number(tp.second ?? "0");
+  return { hh, mm, ss };
+}
+
+function msToMMSS(ms: number) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+/**
+ * Returns ms until 22:00:00 Manila today.
+ * If already >= 22:00, returns 0.
+ * Uses fixed Manila offset (UTC+8) by constructing target UTC.
+ */
+function getMsUntilManila10pm() {
+  const now = new Date();
+
+  // Date in Manila as YYYY-MM-DD
+  const df = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const dateStr = df.format(now); // YYYY-MM-DD
+  const [y, m, d] = dateStr.split("-").map((x) => Number(x));
+
+  // 22:00 Manila == 14:00 UTC
+  const targetUTC = Date.UTC(y, m - 1, d, 14, 0, 0);
+
+  const { hh, mm, ss } = getManilaNowParts();
+  const nowManilaSec = hh * 3600 + mm * 60 + ss;
+  const tenPMsec = 22 * 3600;
+
+  if (nowManilaSec >= tenPMsec) return 0;
+  return targetUTC - now.getTime();
+}
+// -----------------------------------------------------------
 
 export default function RoomPage() {
   const params = useParams<{ id: string }>();
@@ -94,8 +153,11 @@ export default function RoomPage() {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // --- NEW: local message persistence (refresh-safe, cleared only on End Chat) ---
-  const storageKey = useMemo(() => (roomId ? `hs_chat_${roomId}` : ""), [roomId]);
+  // --- local message persistence (refresh-safe, cleared only on End Chat) ---
+  const storageKey = useMemo(
+    () => (roomId ? `hs_chat_${roomId}` : ""),
+    [roomId]
+  );
 
   // Restore on room load
   useEffect(() => {
@@ -106,9 +168,7 @@ export default function RoomPage() {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) setMessages(parsed as ChatMsg[]);
       }
-    } catch {
-      // ignore corrupted cache
-    }
+    } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
@@ -117,9 +177,7 @@ export default function RoomPage() {
     if (!roomId) return;
     try {
       sessionStorage.setItem(storageKey, JSON.stringify(messages));
-    } catch {
-      // ignore quota / private mode issues
-    }
+    } catch {}
   }, [messages, roomId, storageKey]);
 
   function clearLocalHistory() {
@@ -129,6 +187,70 @@ export default function RoomPage() {
     } catch {}
   }
   // ---------------------------------------------------------------------------
+
+  // ---------- NEW: banner countdown + auto system-end at 10PM ----------
+  const [closeBanner, setCloseBanner] = useState<string>(""); // "05:00"
+  const autoEndedRef = useRef(false);
+
+  useEffect(() => {
+    if (!roomId || ended) return;
+
+    function tick() {
+      const msLeft = getMsUntilManila10pm();
+
+      // banner only in last 5 minutes (and before auto-end)
+      if (msLeft > 0 && msLeft <= 5 * 60 * 1000) {
+        setCloseBanner(msToMMSS(msLeft));
+      } else {
+        setCloseBanner("");
+      }
+
+      // auto-end at 10pm
+      if (msLeft <= 0 && !autoEndedRef.current) {
+        autoEndedRef.current = true;
+
+        // fire and forget (but still safe)
+        (async () => {
+          try {
+            await fetch("/api/end", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              cache: "no-store",
+              body: JSON.stringify({
+                room_id: roomId,
+                user_token: userToken,
+                mode: "system", // ✅ does not consume the 2 self-end limit
+              }),
+            }).catch(() => null);
+          } finally {
+            // clear local history (END is the only wipe trigger)
+            clearLocalHistory();
+
+            // notify other user immediately
+            const ch = chRef.current;
+            if (ch) {
+              try {
+                await ch.send({
+                  type: "broadcast",
+                  event: "end",
+                  payload: { by: "system" },
+                });
+              } catch {}
+            }
+
+            setEndedReason("system");
+            setEnded(true);
+          }
+        })();
+      }
+    }
+
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, userToken, ended]);
+  // -------------------------------------------------------------------
 
   function autosizeTextarea() {
     const el = taRef.current;
@@ -302,7 +424,11 @@ export default function RoomPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
-        body: JSON.stringify({ room_id: roomId, user_token: userToken }),
+        body: JSON.stringify({
+          room_id: roomId,
+          user_token: userToken,
+          mode: "user", // ✅ explicit (counts toward limit)
+        }),
       });
 
       const data = await res.json().catch(() => null);
@@ -320,7 +446,9 @@ export default function RoomPage() {
             "End failed: your session token doesn’t match this room (reload the main page and rejoin)."
           );
         } else if (apiErr === "room_not_found") {
-          setLimitMsg("End failed: room not found (it may have already closed).");
+          setLimitMsg(
+            "End failed: room not found (it may have already closed)."
+          );
         } else {
           setLimitMsg(hint);
         }
@@ -361,7 +489,7 @@ export default function RoomPage() {
         ? "You ended the chat."
         : endedReason === "other"
         ? "The stranger ended the chat."
-        : "This chat has ended.";
+        : "Thank you for chatting tonight. See you tomorrow.";
 
     return (
       <main className="min-h-screen bg-gradient-to-b from-teal-50 via-white to-white flex flex-col">
@@ -426,6 +554,14 @@ export default function RoomPage() {
               </div>
             </div>
 
+            {/* ✅ NEW: close banner (only last 5 minutes) */}
+            {closeBanner ? (
+              <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex items-center justify-between">
+                <span>Chatroom will close in</span>
+                <span className="font-mono font-semibold">{closeBanner}</span>
+              </div>
+            ) : null}
+
             {limitMsg && (
               <div className="mt-2 text-xs text-red-600">{limitMsg}</div>
             )}
@@ -434,9 +570,7 @@ export default function RoomPage() {
           {/* MESSAGES */}
           <div className="flex-1 p-4 overflow-y-auto bg-white/70">
             {messages.length === 0 ? (
-              <div className="text-sm text-gray-600">
-                Say hi 👋 (No history — messages disappear on refresh.)
-              </div>
+              <div className="text-sm text-gray-600">Say hi 👋</div>
             ) : (
               messages.map((m) => {
                 const mine = m.from === userToken;
