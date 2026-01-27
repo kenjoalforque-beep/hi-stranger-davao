@@ -36,11 +36,11 @@ function WaitInner() {
 
   return (
     <main className="min-h-screen bg-white flex items-center justify-center p-6">
-      <div className="w-full max-w-md rounded-2xl border border-teal-200 bg-white p-6 shadow-sm text-center">
-        <h1 className="text-2xl font-semibold text-teal-700">
+      <div className="w-full max-w-md rounded-2xl border border-teal-700/30 bg-teal-600 p-6 shadow-sm text-center">
+        <h1 className="text-2xl font-semibold text-white">
           Finding a stranger…
         </h1>
-        <p className="mt-2 text-sm text-gray-700">
+        <p className="mt-2 text-sm text-white/90">
           Please keep this page open.
         </p>
       </div>
