@@ -103,6 +103,11 @@ function isIOS() {
   return /iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream;
 }
 
+function isAndroid() {
+  if (typeof navigator === "undefined") return false;
+  return /Android/i.test(navigator.userAgent || "");
+}
+
 function isInStandaloneMode() {
   // iOS Safari: navigator.standalone
   // Others: display-mode: standalone
@@ -173,28 +178,26 @@ export default function Page() {
 
   // Install-as-app hooks
   useEffect(() => {
-    // If already installed, hide
-    if (isInStandaloneMode()) {
-      setShowInstall(false);
-      return;
-    }
+  if (isInStandaloneMode()) {
+    setShowInstall(false);
+    return;
+  }
 
-    // iOS: show install button (we'll show instructions)
-    if (isIOS()) {
-      setShowInstall(true);
-      return;
-    }
+  // Always show button on iOS + Android (with fallback instructions)
+  if (isIOS() || isAndroid()) {
+    setShowInstall(true);
+  }
 
-    // Android/others: wait for beforeinstallprompt to decide
-    const handler = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setShowInstall(true);
-    };
+  const handler = (e: any) => {
+    e.preventDefault();
+    setDeferredPrompt(e);
+    setShowInstall(true);
+  };
 
-    window.addEventListener("beforeinstallprompt", handler);
-    return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, []);
+  window.addEventListener("beforeinstallprompt", handler);
+  return () => window.removeEventListener("beforeinstallprompt", handler);
+}, []);
+
 
   async function handleJoin() {
     if (!ready || joining) return;
