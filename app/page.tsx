@@ -296,7 +296,7 @@ export default function Page() {
     "flex items-center gap-3 rounded-2xl border border-gray-200 bg-white/70 backdrop-blur px-4 py-3 shadow-sm hover:shadow-md hover:border-teal-300 hover:bg-white transition";
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-teal-50 via-white to-white flex flex-col">
+<main className="min-h-screen bg-gradient-to-b from-teal-600 via-teal-700 to-teal-800 flex flex-col">
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-md rounded-3xl bg-white/90 backdrop-blur border border-teal-100 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.25)] p-6">
           <h1
