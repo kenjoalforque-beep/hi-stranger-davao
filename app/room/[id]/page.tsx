@@ -360,11 +360,15 @@ export default function RoomPage() {
       }
     });
 
-    ch.on("broadcast", { event: "end" }, () => {
-      clearLocalHistory();
-            endOnce("other");
+    ch.on("broadcast", { event: "end" }, (payload) => {
+  clearLocalHistory();
+  const by = (payload as any)?.payload?.by;
 
-    });
+  if (by === "system") endOnce("system");
+  else if (by === userToken) endOnce("you"); // extra-safe
+  else endOnce("other");
+});
+
 
     ch.subscribe((status: any) => {
       setConnected(status === "SUBSCRIBED");
@@ -382,29 +386,30 @@ export default function RoomPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, channelName, userToken]);
 
-  // DB watch: if ended_at is set, show ended screen (and clear local history)
-  useEffect(() => {
-    if (!roomId) return;
+ // DB watch: if ended_at is set, show ended screen (and clear local history)
+useEffect(() => {
+  if (!roomId || ended) return;
 
-    const interval = setInterval(async () => {
-      try {
-        const { data } = await supabaseBrowser
-          .from("rooms")
-          .select("ended_at")
-          .eq("id", roomId)
-          .maybeSingle();
+  const interval = setInterval(async () => {
+    try {
+      const { data } = await supabaseBrowser
+        .from("rooms")
+        .select("ended_at")
+        .eq("id", roomId)
+        .maybeSingle();
 
-        if (data?.ended_at) {
-          clearLocalHistory();
-                      endOnce("system");
+      if (data?.ended_at) {
+        clearLocalHistory();
+        if (!endLockedRef.current) endOnce("system");
+      }
+    } catch {}
+  }, 2000);
 
-        }
-      } catch {}
-    }, 2000);
+  return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [roomId, ended]);
 
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId]);
+
 
   // Load tonight's remaining self-end limit
   useEffect(() => {
