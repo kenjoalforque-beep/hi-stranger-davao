@@ -2,7 +2,17 @@ import { NextResponse } from "next/server";
 import { manilaNowParts } from "@/lib/time";
 
 export async function GET() {
+  // 🔴 TEMP TEST OVERRIDE — REMOVE AFTER TESTING
+  if (process.env.TEST_FORCE_OPEN === "true") {
+    return NextResponse.json({
+      ok: true,
+      state: "open",
+      manila_time: "TEST",
+    });
+  }
+
   const t = manilaNowParts();
+
 
   // ✅ Frontend expects ONLY these 3
   let state: "open" | "entry_closed" | "closed" = "closed";
