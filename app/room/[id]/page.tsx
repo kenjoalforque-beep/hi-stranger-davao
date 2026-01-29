@@ -386,7 +386,10 @@ export default function RoomPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, channelName, userToken]);
 
+
  // DB watch: if ended_at is set, show ended screen (and clear local history)
+// IMPORTANT: ended_at can be set by: (a) you, (b) stranger, (c) system @ 10PM.
+// Do NOT assume "system" unless it's actually past 10PM Manila.
 useEffect(() => {
   if (!roomId || ended) return;
 
@@ -400,7 +403,14 @@ useEffect(() => {
 
       if (data?.ended_at) {
         clearLocalHistory();
-        if (!endLockedRef.current) endOnce("system");
+
+        // If something already decided the reason, don't overwrite it.
+        if (endLockedRef.current) return;
+
+        // Only call "system" if we are at/after 10PM Manila.
+        const msLeft = getMsUntilManila10pm();
+        if (msLeft <= 0) endOnce("system");
+        else endOnce("other");
       }
     } catch {}
   }, 2000);
@@ -408,6 +418,7 @@ useEffect(() => {
   return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [roomId, ended]);
+
 
 
 
