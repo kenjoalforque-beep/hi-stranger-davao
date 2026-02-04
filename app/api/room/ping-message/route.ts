@@ -10,16 +10,43 @@ export async function POST(req: Request) {
   const room_id = body?.room_id;
 
   if (!isUuid(room_id)) {
-    return NextResponse.json({ ok: false, error: "invalid_payload" }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, error: "invalid_payload" },
+      { status: 400 }
+    );
   }
 
   const admin = supabaseAdmin();
 
-  // Update last_msg_at + increment message_count
+  // ✅ Ensure room exists (optional but helps debugging)
+  const { data: room, error: roomErr } = await admin
+    .from("rooms")
+    .select("id")
+    .eq("id", room_id)
+    .maybeSingle();
+
+  if (roomErr) {
+    return NextResponse.json(
+      { ok: false, error: "db_error", details: roomErr.message },
+      { status: 500 }
+    );
+  }
+
+  if (!room?.id) {
+    return NextResponse.json(
+      { ok: false, error: "room_not_found" },
+      { status: 404 }
+    );
+  }
+
+  // ✅ Update last_msg_at + increment message_count
   const { error } = await admin.rpc("room_message_ping", { p_room_id: room_id });
 
   if (error) {
-    return NextResponse.json({ ok: false, error: "db_error", details: error.message }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: "db_error", details: error.message },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({ ok: true });
