@@ -1,44 +1,37 @@
-import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+
+const COOKIE_NAME = "admin_dash";
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Only protect admin routes
+  // Only guard admin surfaces
   const isAdminPage = pathname.startsWith("/admin");
   const isAdminApi = pathname.startsWith("/api/admin");
 
   if (!isAdminPage && !isAdminApi) return NextResponse.next();
 
-  const expected = process.env.ADMIN_DASH_TOKEN;
-  if (!expected) {
-    return NextResponse.json(
-      { ok: false, error: "admin_token_not_configured" },
-      { status: 500 }
-    );
-  }
+  // Allow the login endpoints/pages without auth
+  if (pathname === "/admin/login") return NextResponse.next();
+  if (pathname === "/api/admin/login") return NextResponse.next();
 
-  const token =
-    req.cookies.get("admin_dash_token")?.value ||
-    req.headers.get("x-admin-token") ||
-    req.nextUrl.searchParams.get("token");
+  // Check cookie
+  const authed = req.cookies.get(COOKIE_NAME)?.value === "1";
+  if (authed) return NextResponse.next();
 
-  if (token !== expected) {
-    // If it's a page request, send to home
-    if (isAdminPage) {
-      const url = req.nextUrl.clone();
-      url.pathname = "/";
-      return NextResponse.redirect(url);
-    }
-
-    // If it's an API request, return JSON
+  // If API -> 401 JSON
+  if (isAdminApi) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  return NextResponse.next();
+  // If page -> redirect to login
+  const url = req.nextUrl.clone();
+  url.pathname = "/admin/login";
+  url.searchParams.set("next", pathname);
+  return NextResponse.redirect(url);
 }
 
-// IMPORTANT: only run middleware for these paths
 export const config = {
   matcher: ["/admin/:path*", "/api/admin/:path*"],
 };
