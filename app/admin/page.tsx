@@ -50,7 +50,8 @@ export default function AdminDashboard() {
       alive = false;
       clearInterval(t);
     };
-  }, [token]);
+}, []);
+
 
   const daily = metrics?.daily ?? [];
   const maxUniq = Math.max(1, ...daily.map((d) => Number(d.unique_users || 0)));
