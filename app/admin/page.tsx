@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react";
 
-type DailyRow = { day: string; joins: number; unique_users: number };
+// ✅ UPDATED: add matches + chats for historical rows
+type DailyRow = {
+  day: string;
+  joins: number;
+  unique_users: number;
+  matches: number;
+  chats: number;
+};
 
 type Metrics = {
   now: string;
@@ -111,7 +118,7 @@ export default function AdminDashboard() {
               All-time activity
             </h2>
             <p className="text-sm text-gray-600">
-              Daily unique users and join events.
+              Daily users, joins, matches, and chats.
             </p>
 
             <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
@@ -123,11 +130,18 @@ export default function AdminDashboard() {
                     const w = Math.round(
                       (Number(d.unique_users || 0) / maxUniq) * 100
                     );
+
+                    const users = Number(d.unique_users || 0);
+                    const joins = Number(d.joins || 0);
+                    const matches = Number(d.matches || 0);
+                    const chats = Number(d.chats || 0);
+
                     return (
                       <div key={d.day} className="flex items-center gap-3">
                         <div className="w-24 text-xs text-gray-600 font-mono">
                           {d.day}
                         </div>
+
                         <div className="flex-1">
                           <div className="h-3 rounded-full bg-gray-100 overflow-hidden">
                             <div
@@ -136,8 +150,10 @@ export default function AdminDashboard() {
                             />
                           </div>
                         </div>
-                        <div className="w-28 text-right text-xs text-gray-700">
-                          <b>{d.unique_users}</b> uniq · {d.joins} joins
+
+                        {/* ✅ UPDATED: users · joins · matches · chats */}
+                        <div className="w-[260px] text-right text-xs text-gray-700">
+                          <b>{users}</b> users · {joins} joins · {matches} matches · {chats} chats
                         </div>
                       </div>
                     );
