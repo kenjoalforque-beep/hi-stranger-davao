@@ -490,6 +490,12 @@ useEffect(() => {
     });
 
     await ch.send({ type: "broadcast", event: "message", payload: msg });
+  await fetch("/api/room/ping-message", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ room_id: roomId }),
+}).catch(() => null);
+
   }
 
   async function endChat() {
