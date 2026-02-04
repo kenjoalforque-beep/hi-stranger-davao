@@ -336,38 +336,45 @@ export default function RoomPage() {
 
     chRef.current = ch;
 
-    ch.on("broadcast", { event: "message" }, (payload) => {
-      const p = payload.payload as any;
-      if (!p?.id || !p?.text || !p?.from || !p?.ts) return;
+    // 🔧 FIX: handle both Supabase payload shapes safely
+function unwrapBroadcast(evt: any) {
+  return evt?.payload?.payload ?? evt?.payload ?? null;
+}
 
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === p.id)) return prev;
-        return [...prev, { id: p.id, text: p.text, from: p.from, ts: p.ts }];
-      });
-    });
+ch.on("broadcast", { event: "message" }, (evt: any) => {
+  const p = unwrapBroadcast(evt);
+  if (!p?.id || !p?.text || !p?.from || !p?.ts) return;
 
-    ch.on("broadcast", { event: "typing" }, (payload) => {
-      const p = payload.payload as any;
-      if (!p?.from || p.from === userToken) return;
+  setMessages((prev) => {
+    if (prev.some((m) => m.id === p.id)) return prev;
+    return [...prev, { id: p.id, text: p.text, from: p.from, ts: p.ts }];
+  });
+});
 
-      setOtherTyping(Boolean(p.typing));
-      if (otherTypingTimer.current) clearTimeout(otherTypingTimer.current);
-      if (p.typing) {
-        otherTypingTimer.current = setTimeout(
-          () => setOtherTyping(false),
-          1500
-        );
-      }
-    });
+ch.on("broadcast", { event: "typing" }, (evt: any) => {
+  const p = unwrapBroadcast(evt);
+  if (!p?.from || p.from === userToken) return;
 
-    ch.on("broadcast", { event: "end" }, (payload) => {
+  setOtherTyping(Boolean(p.typing));
+  if (otherTypingTimer.current) clearTimeout(otherTypingTimer.current);
+  if (p.typing) {
+    otherTypingTimer.current = setTimeout(
+      () => setOtherTyping(false),
+      1500
+    );
+  }
+});
+
+ch.on("broadcast", { event: "end" }, (evt: any) => {
   clearLocalHistory();
-  const by = (payload as any)?.payload?.by;
+  const p = unwrapBroadcast(evt);
+  const by = p?.by;
 
   if (by === "system") endOnce("system");
-  else if (by === userToken) endOnce("you"); // extra-safe
+  else if (by === userToken) endOnce("you");
   else endOnce("other");
 });
+
 
 
     ch.subscribe((status: any) => {
