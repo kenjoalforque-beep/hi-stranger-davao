@@ -64,11 +64,22 @@ function WaitInner() {
     }
 
     // 9:50 PM cutoff (stop trying to match)
-    if (isAfterManilaTime(21, 50)) {
-      stopAllTimers();
-      setState("no_match");
-      return true;
-    }
+if (isAfterManilaTime(21, 50)) {
+  stopAllTimers();
+
+  // 🔴 NEW: tell backend this user left the queue
+  if (queueId) {
+    fetch("/api/leave", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ queue_id: queueId }),
+    }).catch(() => null);
+  }
+
+  setState("no_match");
+  return true;
+}
+
 
     return false;
   }
