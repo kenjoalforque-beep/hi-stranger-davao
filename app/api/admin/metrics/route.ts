@@ -6,10 +6,7 @@ function unauthorized() {
 }
 
 export async function GET(req: Request) {
-  const token = req.headers.get("x-admin-token") || "";
-  if (!process.env.ADMIN_DASH_TOKEN || token !== process.env.ADMIN_DASH_TOKEN) {
-    return unauthorized();
-  }
+  
 
   const url = new URL(req.url);
   const days = Math.max(1, Math.min(60, Number(url.searchParams.get("days") || 14)));

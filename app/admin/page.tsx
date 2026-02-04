@@ -29,10 +29,8 @@ export default function AdminDashboard() {
     async function load() {
       try {
         setErr("");
-        const res = await fetch("/api/admin/metrics?days=14", {
-          headers: { "x-admin-token": token },
-          cache: "no-store",
-        });
+        const res = await fetch("/api/admin/metrics?days=14", { cache: "no-store" });
+
 
         const data = await res.json().catch(() => null);
 
