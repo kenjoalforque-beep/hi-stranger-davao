@@ -16,12 +16,8 @@ export default function AdminDashboard() {
     daily: DailyRow[];
   } | null>(null);
 
-  // Put your token in localStorage once:
-  // localStorage.setItem("ADMIN_DASH_TOKEN", "yourtoken")
-  const token = useMemo(() => {
-    if (typeof window === "undefined") return "";
-    return localStorage.getItem("ADMIN_DASH_TOKEN") || "";
-  }, []);
+ 
+  
 
   useEffect(() => {
     let alive = true;
@@ -68,15 +64,6 @@ export default function AdminDashboard() {
             {metrics?.now ? `Last updated: ${new Date(metrics.now).toLocaleString()}` : "—"}
           </p>
 
-          {!token ? (
-            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
-              Missing token. Set it once in DevTools Console:
-              <pre className="mt-2 text-xs bg-white/60 p-2 rounded-xl overflow-auto">
-{`localStorage.setItem("ADMIN_DASH_TOKEN", "YOUR_TOKEN_HERE")`}
-              </pre>
-              Refresh after setting.
-            </div>
-          ) : null}
 
           {loading ? <p className="mt-4 text-gray-700">Loading…</p> : null}
           {err ? (
