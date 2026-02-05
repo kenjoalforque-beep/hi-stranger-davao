@@ -64,7 +64,20 @@ export default function AdminDashboard() {
     };
   }, []);
 
-  const daily = metrics?.daily ?? [];
+  // ✅ recent first
+  const daily = [...(metrics?.daily ?? [])].reverse();
+
+  // ✅ totals (based on whatever days=14 returns)
+  const totals = daily.reduce(
+    (a, d) => ({
+      users: a.users + Number(d.unique_users || 0),
+      joins: a.joins + Number(d.joins || 0),
+      matches: a.matches + Number(d.matches || 0),
+      chats: a.chats + Number(d.chats || 0),
+    }),
+    { users: 0, joins: 0, matches: 0, chats: 0 }
+  );
+
   const maxUniq = Math.max(1, ...daily.map((d) => Number(d.unique_users || 0)));
 
   return (
@@ -100,7 +113,8 @@ export default function AdminDashboard() {
 
             {!metrics?.realtime_enabled ? (
               <div className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-gray-600">
-                Session inactive. Real-time stats appear only between 9:00–10:00 PM.
+                Session inactive. Real-time stats appear only between 9:00–10:00
+                PM.
               </div>
             ) : (
               <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -110,6 +124,23 @@ export default function AdminDashboard() {
                 <Stat label="Chatting rooms" value={metrics.chatting_rooms} />
               </div>
             )}
+          </div>
+
+          {/* ================= ALL-TIME TOTALS ================= */}
+          <div className="mt-8">
+            <h2 className="text-lg font-semibold text-teal-800">
+              All-time totals
+            </h2>
+            <p className="text-sm text-gray-600">
+              Totals based on the last 14 days shown below.
+            </p>
+
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+              <Stat label="Users" value={totals.users} />
+              <Stat label="Joins" value={totals.joins} />
+              <Stat label="Matches" value={totals.matches} />
+              <Stat label="Chats" value={totals.chats} />
+            </div>
           </div>
 
           {/* ================= HISTORICAL SECTION ================= */}
@@ -153,7 +184,8 @@ export default function AdminDashboard() {
 
                         {/* ✅ UPDATED: users · joins · matches · chats */}
                         <div className="w-[260px] text-right text-xs text-gray-700">
-                          <b>{users}</b> users · {joins} joins · {matches} matches · {chats} chats
+                          <b>{users}</b> users · {joins} joins · {matches}{" "}
+                          matches · {chats} chats
                         </div>
                       </div>
                     );
