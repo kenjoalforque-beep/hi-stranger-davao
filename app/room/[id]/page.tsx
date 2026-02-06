@@ -162,11 +162,11 @@ export default function RoomPage() {
 
   const taRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // ✅ NEW: message list ref + sticky-to-bottom behavior
+  // ✅ message list ref + sticky-to-bottom behavior
   const listRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
 
-  // ✅ NEW: notification sound (plays only for stranger messages)
+  // ✅ notification sound (plays only for stranger messages)
   const notifAudioRef = useRef<HTMLAudioElement | null>(null);
   const notifPrimedRef = useRef(false);
 
@@ -175,11 +175,10 @@ export default function RoomPage() {
     notifPrimedRef.current = true;
 
     try {
-      const a = new Audio("/sounds/message.mp3"); // ✅ put this file in /public/sounds/message.mp3
+      const a = new Audio("/sounds/message.mp3");
       a.volume = 0.7;
       notifAudioRef.current = a;
 
-      // Prime once (may be blocked until first gesture; that's ok)
       a.play()
         .then(() => {
           a.pause();
@@ -241,6 +240,59 @@ export default function RoomPage() {
     } catch {}
   }
   // ---------------------------------------------------------------------------
+
+  // ---------- SEEN LOGIC (NEW) ----------
+  // Track: last message I sent (id) and whether other user has "seen" it
+  const [seenMsgId, setSeenMsgId] = useState<string>("");
+  const [isSeen, setIsSeen] = useState(false);
+
+  const lastMineId = useMemo(() => {
+    // Find newest message "from me"
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]?.from === userToken) return messages[i].id;
+    }
+    return "";
+  }, [messages, userToken]);
+
+  // Reset seen when my latest outgoing message changes
+  useEffect(() => {
+    if (!lastMineId) {
+      setSeenMsgId("");
+      setIsSeen(false);
+      return;
+    }
+    if (lastMineId !== seenMsgId) {
+      setSeenMsgId(lastMineId);
+      setIsSeen(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastMineId]);
+
+  function sendSeenIfNeeded() {
+    const ch = chRef.current;
+    if (!ch || ended) return;
+
+    // Only send seen if:
+    // - there is at least one message from the other person
+    // - user is at/near bottom (means they likely viewed latest)
+    const el = listRef.current;
+    if (!el) return;
+    if (!isNearBottom(el)) return;
+
+    const last = messages[messages.length - 1];
+    if (!last) return;
+    if (last.from === userToken) return; // last is mine; "seen" should be triggered by me reading theirs (not needed)
+
+    // Send "seen" for the latest message id we have in the thread
+    try {
+      ch.send({
+        type: "broadcast",
+        event: "seen",
+        payload: { by: userToken, msg_id: last.id, ts: Date.now() },
+      });
+    } catch {}
+  }
+  // --------------------------------------
 
   // ---------- banner countdown + auto system-end at 10PM ----------
   const [closeBanner, setCloseBanner] = useState<string>("");
@@ -314,19 +366,29 @@ export default function RoomPage() {
 
     const onScroll = () => {
       stickToBottomRef.current = isNearBottom(el);
+
+      // NEW: whenever user scrolls near bottom, emit seen if applicable
+      if (stickToBottomRef.current) {
+        sendSeenIfNeeded();
+      }
     };
 
     el.addEventListener("scroll", onScroll, { passive: true });
     stickToBottomRef.current = isNearBottom(el);
 
     return () => el.removeEventListener("scroll", onScroll);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, ended]);
 
   // ✅ auto-scroll ONLY if user is already near bottom
   useEffect(() => {
     if (!listRef.current) return;
     if (!stickToBottomRef.current) return;
     requestAnimationFrame(() => scrollToBottom("auto"));
+
+    // NEW: if we auto-scrolled to bottom, emit seen if applicable
+    requestAnimationFrame(() => sendSeenIfNeeded());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length]);
 
   // ✅ when mobile keyboard opens/closes, keep bottom visible if sticky
@@ -337,6 +399,7 @@ export default function RoomPage() {
     const handler = () => {
       if (stickToBottomRef.current) {
         requestAnimationFrame(() => scrollToBottom("auto"));
+        requestAnimationFrame(() => sendSeenIfNeeded());
       }
     };
 
@@ -346,7 +409,8 @@ export default function RoomPage() {
       vv.removeEventListener("resize", handler);
       vv.removeEventListener("scroll", handler);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, ended]);
 
   // ====== REALTIME LOGIC ======
   useEffect(() => {
@@ -381,6 +445,9 @@ export default function RoomPage() {
         if (prev.some((m) => m.id === p.id)) return prev;
         return [...prev, { id: p.id, text: p.text, from: p.from, ts: p.ts }];
       });
+
+      // NEW: if I just received a message and I'm already at bottom, mark seen
+      requestAnimationFrame(() => sendSeenIfNeeded());
     });
 
     ch.on("broadcast", { event: "typing" }, (evt: any) => {
@@ -407,6 +474,19 @@ export default function RoomPage() {
       else endOnce("other");
     });
 
+    // ✅ NEW: Seen event (when other user confirms they saw something)
+    ch.on("broadcast", { event: "seen" }, (evt: any) => {
+      const p = unwrapBroadcast(evt);
+      const by = p?.by;
+      const msgId = p?.msg_id;
+
+      // If stranger is the one who sent the seen event, and it matches my last sent msg,
+      // mark Seen for that message.
+      if (by && by !== userToken && msgId && msgId === lastMineId) {
+        setIsSeen(true);
+      }
+    });
+
     ch.subscribe((status: any) => {
       setConnected(status === "SUBSCRIBED");
     });
@@ -421,7 +501,7 @@ export default function RoomPage() {
       if (myTypingTimer.current) clearTimeout(myTypingTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId, channelName, userToken]);
+  }, [roomId, channelName, userToken, lastMineId]);
 
   // DB watch: if ended_at is set, show ended screen (and clear local history)
   useEffect(() => {
@@ -510,6 +590,10 @@ export default function RoomPage() {
     };
 
     stickToBottomRef.current = true;
+
+    // NEW: Sending a new message resets Seen
+    setIsSeen(false);
+    setSeenMsgId(msg.id);
 
     setMessages((prev) => [...prev, msg]);
     setText("");
@@ -697,7 +781,7 @@ export default function RoomPage() {
           <div
             ref={listRef}
             className="flex-1 min-h-0 p-4 overflow-y-auto bg-white/70"
-            onPointerDown={() => primeAudio()} // ✅ primes sound on first interaction too
+            onPointerDown={() => primeAudio()}
             onTouchStart={() => primeAudio()}
           >
             {messages.length === 0 ? (
@@ -705,22 +789,33 @@ export default function RoomPage() {
             ) : (
               messages.map((m) => {
                 const mine = m.from === userToken;
+                const showSeen =
+                  mine &&
+                  isSeen &&
+                  !!seenMsgId &&
+                  m.id === seenMsgId; // show only under my latest message
+
                 return (
-                  <div
-                    key={m.id}
-                    className={`${
-                      mine ? "flex justify-end" : "flex justify-start"
-                    } mb-1.5`}
-                  >
-                    <div
-                      className={
-                        mine
-                          ? "max-w-[82%] rounded-3xl bg-gradient-to-br from-teal-500 to-teal-600 text-white px-4 py-2 text-sm shadow-[0_10px_24px_-14px_rgba(13,148,136,0.9)] whitespace-pre-wrap break-words"
-                          : "max-w-[82%] rounded-3xl bg-white text-gray-800 px-4 py-2 text-sm border border-gray-200 shadow-sm whitespace-pre-wrap break-words"
-                      }
-                    >
-                      {m.text}
+                  <div key={m.id} className="mb-1.5">
+                    <div className={mine ? "flex justify-end" : "flex justify-start"}>
+                      <div
+                        className={
+                          mine
+                            ? "max-w-[82%] rounded-3xl bg-gradient-to-br from-teal-500 to-teal-600 text-white px-4 py-2 text-sm shadow-[0_10px_24px_-14px_rgba(13,148,136,0.9)] whitespace-pre-wrap break-words"
+                            : "max-w-[82%] rounded-3xl bg-white text-gray-800 px-4 py-2 text-sm border border-gray-200 shadow-sm whitespace-pre-wrap break-words"
+                        }
+                      >
+                        {m.text}
+                      </div>
                     </div>
+
+                    {showSeen ? (
+                      <div className="flex justify-end mt-1">
+                        <div className="text-[11px] text-gray-500 px-2">
+                          Seen
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 );
               })
@@ -742,9 +837,10 @@ export default function RoomPage() {
                   value={text}
                   onChange={(e) => handleTextChange(e.target.value)}
                   onFocus={() => {
-                    primeAudio(); // ✅ primes sound on focus too
+                    primeAudio();
                     if (stickToBottomRef.current) {
                       requestAnimationFrame(() => scrollToBottom("auto"));
+                      requestAnimationFrame(() => sendSeenIfNeeded());
                     }
                   }}
                   onKeyDown={(e) => {
