@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-// ✅ UPDATED: add matches + chats for historical rows
 type DailyRow = {
   day: string;
   joins: number;
@@ -11,13 +10,27 @@ type DailyRow = {
   chats: number;
 };
 
+type Breakdown = { men: number; women: number; nopref: number };
+
 type Metrics = {
   now: string;
+
+  // realtime
   realtime_enabled: boolean;
   online_users: number;
   waiting: number;
   live_rooms: number;
   chatting_rooms: number;
+
+  // NEW
+  realtime_breakdowns: null | {
+    online_users: Breakdown;
+    waiting: Breakdown;
+    live_rooms: Breakdown;
+    chatting_rooms: Breakdown;
+  };
+
+  // historical
   daily: DailyRow[];
 };
 
@@ -64,10 +77,10 @@ export default function AdminDashboard() {
     };
   }, []);
 
-  // ✅ recent first
+  // recent first
   const daily = [...(metrics?.daily ?? [])].reverse();
 
-  // ✅ totals (based on whatever days=14 returns)
+  // totals (based on whatever days=14 returns)
   const totals = daily.reduce(
     (a, d) => ({
       users: a.users + Number(d.unique_users || 0),
@@ -79,6 +92,8 @@ export default function AdminDashboard() {
   );
 
   const maxUniq = Math.max(1, ...daily.map((d) => Number(d.unique_users || 0)));
+
+  const bd = metrics?.realtime_breakdowns ?? null;
 
   return (
     <main className="min-h-screen bg-teal-700 p-5">
@@ -118,10 +133,26 @@ export default function AdminDashboard() {
               </div>
             ) : (
               <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-                <Stat label="Online users" value={metrics.online_users} />
-                <Stat label="Waitlist" value={metrics.waiting} />
-                <Stat label="Live rooms" value={metrics.live_rooms} />
-                <Stat label="Chatting rooms" value={metrics.chatting_rooms} />
+                <Stat
+                  label="Users (online)"
+                  value={metrics.online_users}
+                  breakdown={bd?.online_users ?? null}
+                />
+                <Stat
+                  label="Joins (waiting)"
+                  value={metrics.waiting}
+                  breakdown={bd?.waiting ?? null}
+                />
+                <Stat
+                  label="Matches (live rooms)"
+                  value={metrics.live_rooms}
+                  breakdown={bd?.live_rooms ?? null}
+                />
+                <Stat
+                  label="Chats (active)"
+                  value={metrics.chatting_rooms}
+                  breakdown={bd?.chatting_rooms ?? null}
+                />
               </div>
             )}
           </div>
@@ -182,8 +213,7 @@ export default function AdminDashboard() {
                           </div>
                         </div>
 
-                        {/* ✅ UPDATED: users · joins · matches · chats */}
-                        <div className="w-[260px] text-right text-xs text-gray-700">
+                        <div className="w-[320px] text-right text-xs text-gray-700">
                           <b>{users}</b> users · {joins} joins · {matches}{" "}
                           matches · {chats} chats
                         </div>
@@ -201,11 +231,27 @@ export default function AdminDashboard() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({
+  label,
+  value,
+  breakdown,
+}: {
+  label: string;
+  value: number;
+  breakdown?: Breakdown | null;
+}) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="text-xs text-gray-600">{label}</div>
       <div className="mt-1 text-2xl font-semibold text-teal-800">{value}</div>
+
+      {breakdown ? (
+        <div className="mt-2 text-[11px] text-gray-700 space-y-1">
+          <div>Men: <b>{breakdown.men}</b></div>
+          <div>Women: <b>{breakdown.women}</b></div>
+          <div>No pref: <b>{breakdown.nopref}</b></div>
+        </div>
+      ) : null}
     </div>
   );
 }
