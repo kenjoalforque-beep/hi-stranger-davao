@@ -1,6 +1,29 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
+function manilaNow() {
+  // Use Intl so it works on Vercel
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+    .formatToParts(new Date())
+    .reduce<Record<string, string>>((a, p) => {
+      if (p.type !== "literal") a[p.type] = p.value;
+      return a;
+    }, {});
+  const hh = Number(parts.hour || "0");
+  const mm = Number(parts.minute || "0");
+  return { hh, mm };
+}
+
+function isAfterManila(h: number, m: number) {
+  const { hh, mm } = manilaNow();
+  return hh > h || (hh === h && mm >= m);
+}
+
 type DailyRow = {
   day: string;
   unique_users: number;
@@ -49,12 +72,15 @@ function isRealtimeEnabledNow() {
   const mm = Number(parts.minute ?? "0");
 
   // realtime only 21:00–22:00
-  return (hh === 21) || (hh === 22 && mm === 0); // safe edge (22:00)
+  return hh === 21 || (hh === 22 && mm === 0); // safe edge (22:00)
 }
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const days = Math.max(1, Math.min(60, Number(url.searchParams.get("days") || 14)));
+  const days = Math.max(
+    1,
+    Math.min(60, Number(url.searchParams.get("days") || 14))
+  );
 
   const admin = supabaseAdmin();
   const nowIso = new Date().toISOString();
@@ -63,8 +89,22 @@ export async function GET(req: Request) {
   const { startIso, endIso } = getManilaSessionRangeISO();
   const seenCutoffIso = new Date(Date.now() - 2 * 60 * 1000).toISOString();
 
-  // ---------- Real-time counts (unchanged logic style) ----------
-  // NOTE: keep your existing logic if you already have it; this is the safe version.
+  // ✅ after 9:50 PM, matching is closed and waitlist must be cleared
+  const matchingClosed = isAfterManila(21, 50);
+
+  // ✅ SERVER-SIDE KICK (REAL FIX)
+  // Clears stuck queue rows even if user closed browser / lost signal / backgrounded.
+  // Safe because matchmake() already sets active=false for matched users.
+  if (realtime_enabled && matchingClosed) {
+    await admin
+      .from("queue")
+      .update({ active: false })
+      .gte("joined_at", startIso)
+      .lt("joined_at", endIso)
+      .eq("active", true);
+  }
+
+  // ---------- Real-time counts ----------
   let online_users = 0;
   let waiting = 0;
   let live_rooms = 0;
@@ -80,14 +120,19 @@ export async function GET(req: Request) {
 
     online_users = onlineRes.count ?? 0;
 
-    const waitRes = await admin
-      .from("queue")
-      .select("id", { count: "exact", head: true })
-      .gte("joined_at", startIso)
-      .lt("joined_at", endIso)
-      .eq("active", true);
+    // ✅ After 9:50 we force waiting=0 (because we already kicked server-side)
+    if (!matchingClosed) {
+      const waitRes = await admin
+        .from("queue")
+        .select("id", { count: "exact", head: true })
+        .gte("joined_at", startIso)
+        .lt("joined_at", endIso)
+        .eq("active", true);
 
-    waiting = waitRes.count ?? 0;
+      waiting = waitRes.count ?? 0;
+    } else {
+      waiting = 0;
+    }
 
     const liveRes = await admin
       .from("rooms")
@@ -110,7 +155,7 @@ export async function GET(req: Request) {
     chatting_rooms = chatRes.count ?? 0;
   }
 
-  // ---------- Real-time breakdowns (NEW) ----------
+  // ---------- Real-time breakdowns ----------
   let realtime_breakdowns:
     | {
         online_users: Breakdown;
@@ -121,10 +166,10 @@ export async function GET(req: Request) {
     | undefined;
 
   if (realtime_enabled) {
-    const { data: bd, error: bdErr } = await admin.rpc("admin_realtime_breakdowns", {
-      p_start: startIso,
-      p_end: endIso,
-    });
+    const { data: bd, error: bdErr } = await admin.rpc(
+      "admin_realtime_breakdowns",
+      { p_start: startIso, p_end: endIso }
+    );
 
     if (!bdErr && Array.isArray(bd)) {
       const map = new Map<string, Breakdown>();
@@ -137,16 +182,35 @@ export async function GET(req: Request) {
       }
 
       realtime_breakdowns = {
-        online_users: map.get("online_users") ?? { men: 0, women: 0, nopref: 0 },
+        online_users:
+          map.get("online_users") ?? { men: 0, women: 0, nopref: 0 },
         waiting: map.get("waiting") ?? { men: 0, women: 0, nopref: 0 },
-        live_rooms: map.get("live_rooms") ?? { men: 0, women: 0, nopref: 0 },
-        chatting_rooms: map.get("chatting_rooms") ?? { men: 0, women: 0, nopref: 0 },
+        live_rooms:
+          map.get("live_rooms") ?? { men: 0, women: 0, nopref: 0 },
+        chatting_rooms:
+          map.get("chatting_rooms") ?? { men: 0, women: 0, nopref: 0 },
       };
     }
   }
 
+  // ✅ After 9:50, force waiting breakdown to 0 (even if RPC returns stale)
+  if (realtime_enabled && matchingClosed) {
+    if (!realtime_breakdowns) {
+      realtime_breakdowns = {
+        online_users: { men: 0, women: 0, nopref: 0 },
+        waiting: { men: 0, women: 0, nopref: 0 },
+        live_rooms: { men: 0, women: 0, nopref: 0 },
+        chatting_rooms: { men: 0, women: 0, nopref: 0 },
+      };
+    }
+    realtime_breakdowns.waiting = { men: 0, women: 0, nopref: 0 };
+  }
+
   // ---------- Historical (daily) ----------
-  const { data: daily, error: dailyErr } = await admin.rpc("admin_daily_user_stats", { p_days: days });
+  const { data: daily, error: dailyErr } = await admin.rpc(
+    "admin_daily_user_stats",
+    { p_days: days }
+  );
 
   if (dailyErr) {
     return NextResponse.json(
