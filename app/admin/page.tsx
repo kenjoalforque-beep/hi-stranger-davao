@@ -133,26 +133,32 @@ export default function AdminDashboard() {
               </div>
             ) : (
               <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                
+
                 <Stat
-                  label="Users (online)"
-                  value={metrics.online_users}
-                  breakdown={bd?.online_users ?? null}
-                />
-                <Stat
-                  label="Joins (waiting)"
-                  value={metrics.waiting}
-                  breakdown={bd?.waiting ?? null}
-                />
-                <Stat
-                  label="Matches (live rooms)"
-                  value={metrics.live_rooms}
-                  breakdown={bd?.live_rooms ?? null}
-                />
-                <Stat
-                  label="Chats (active)"
-                  value={metrics.chatting_rooms}
-                  breakdown={bd?.chatting_rooms ?? null}
-                />
+  label="Online users"
+  value={metrics.online_users}
+  breakdown={metrics.realtime_breakdowns?.online_users}
+/>
+
+<Stat
+  label="Waitlist"
+  value={metrics.waiting}
+  breakdown={metrics.realtime_breakdowns?.waiting}
+/>
+
+<Stat
+  label="Live rooms"
+  value={metrics.live_rooms}
+  breakdown={metrics.realtime_breakdowns?.live_rooms}
+/>
+
+<Stat
+  label="Chatting rooms"
+  value={metrics.chatting_rooms}
+  breakdown={metrics.realtime_breakdowns?.chatting_rooms}
+/>
+
               </div>
             )}
           </div>
@@ -231,6 +237,8 @@ export default function AdminDashboard() {
   );
 }
 
+
+
 function Stat({
   label,
   value,
@@ -238,20 +246,20 @@ function Stat({
 }: {
   label: string;
   value: number;
-  breakdown?: Breakdown | null;
+  breakdown?: { men: number; women: number; nopref: number };
 }) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="text-xs text-gray-600">{label}</div>
       <div className="mt-1 text-2xl font-semibold text-teal-800">{value}</div>
 
-      {breakdown ? (
-        <div className="mt-2 text-[11px] text-gray-700 space-y-1">
-          <div>Men: <b>{breakdown.men}</b></div>
-          <div>Women: <b>{breakdown.women}</b></div>
-          <div>No pref: <b>{breakdown.nopref}</b></div>
+      {breakdown && (
+        <div className="mt-2 text-[11px] text-gray-600 space-y-0.5">
+          <div>Men: {breakdown.men}</div>
+          <div>Women: {breakdown.women}</div>
+          <div>No pref: {breakdown.nopref}</div>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
