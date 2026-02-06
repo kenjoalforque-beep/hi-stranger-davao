@@ -154,7 +154,6 @@ export default function RoomPage() {
     setEnded(true);
   }
 
-
   const [limitMsg, setLimitMsg] = useState<string>("");
   const [endsLeft, setEndsLeft] = useState<number>(2);
 
@@ -166,6 +165,38 @@ export default function RoomPage() {
   // ✅ NEW: message list ref + sticky-to-bottom behavior
   const listRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
+
+  // ✅ NEW: notification sound (plays only for stranger messages)
+  const notifAudioRef = useRef<HTMLAudioElement | null>(null);
+  const notifPrimedRef = useRef(false);
+
+  function primeAudio() {
+    if (notifPrimedRef.current) return;
+    notifPrimedRef.current = true;
+
+    try {
+      const a = new Audio("/sounds/message.mp3"); // ✅ put this file in /public/sounds/message.mp3
+      a.volume = 0.7;
+      notifAudioRef.current = a;
+
+      // Prime once (may be blocked until first gesture; that's ok)
+      a.play()
+        .then(() => {
+          a.pause();
+          a.currentTime = 0;
+        })
+        .catch(() => {});
+    } catch {}
+  }
+
+  function playNotif() {
+    const a = notifAudioRef.current;
+    if (!a) return;
+    try {
+      a.currentTime = 0;
+      a.play().catch(() => {});
+    } catch {}
+  }
 
   function isNearBottom(el: HTMLDivElement) {
     const threshold = 140; // px
@@ -256,8 +287,7 @@ export default function RoomPage() {
               } catch {}
             }
 
-                        endOnce("system");
-
+            endOnce("system");
           }
         })();
       }
@@ -277,7 +307,7 @@ export default function RoomPage() {
     el.style.height = Math.min(el.scrollHeight, 96) + "px";
   }
 
-  // ✅ NEW: keep sticky flag updated when user scrolls
+  // ✅ keep sticky flag updated when user scrolls
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
@@ -287,22 +317,19 @@ export default function RoomPage() {
     };
 
     el.addEventListener("scroll", onScroll, { passive: true });
-    // initialize
     stickToBottomRef.current = isNearBottom(el);
 
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
-  // ✅ NEW: auto-scroll ONLY if user is already near bottom
+  // ✅ auto-scroll ONLY if user is already near bottom
   useEffect(() => {
     if (!listRef.current) return;
     if (!stickToBottomRef.current) return;
-
-    // next frame ensures DOM has the new bubble height
     requestAnimationFrame(() => scrollToBottom("auto"));
   }, [messages.length]);
 
-  // ✅ NEW: when mobile keyboard opens/closes, keep bottom visible if sticky
+  // ✅ when mobile keyboard opens/closes, keep bottom visible if sticky
   useEffect(() => {
     const vv = (window as any).visualViewport as VisualViewport | undefined;
     if (!vv) return;
@@ -337,45 +364,48 @@ export default function RoomPage() {
     chRef.current = ch;
 
     // 🔧 FIX: handle both Supabase payload shapes safely
-function unwrapBroadcast(evt: any) {
-  return evt?.payload?.payload ?? evt?.payload ?? null;
-}
+    function unwrapBroadcast(evt: any) {
+      return evt?.payload?.payload ?? evt?.payload ?? null;
+    }
 
-ch.on("broadcast", { event: "message" }, (evt: any) => {
-  const p = unwrapBroadcast(evt);
-  if (!p?.id || !p?.text || !p?.from || !p?.ts) return;
+    ch.on("broadcast", { event: "message" }, (evt: any) => {
+      const p = unwrapBroadcast(evt);
+      if (!p?.id || !p?.text || !p?.from || !p?.ts) return;
 
-  setMessages((prev) => {
-    if (prev.some((m) => m.id === p.id)) return prev;
-    return [...prev, { id: p.id, text: p.text, from: p.from, ts: p.ts }];
-  });
-});
+      // ✅ play sound ONLY when stranger sends a new message
+      if (p.from !== userToken) {
+        playNotif();
+      }
 
-ch.on("broadcast", { event: "typing" }, (evt: any) => {
-  const p = unwrapBroadcast(evt);
-  if (!p?.from || p.from === userToken) return;
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === p.id)) return prev;
+        return [...prev, { id: p.id, text: p.text, from: p.from, ts: p.ts }];
+      });
+    });
 
-  setOtherTyping(Boolean(p.typing));
-  if (otherTypingTimer.current) clearTimeout(otherTypingTimer.current);
-  if (p.typing) {
-    otherTypingTimer.current = setTimeout(
-      () => setOtherTyping(false),
-      1500
-    );
-  }
-});
+    ch.on("broadcast", { event: "typing" }, (evt: any) => {
+      const p = unwrapBroadcast(evt);
+      if (!p?.from || p.from === userToken) return;
 
-ch.on("broadcast", { event: "end" }, (evt: any) => {
-  clearLocalHistory();
-  const p = unwrapBroadcast(evt);
-  const by = p?.by;
+      setOtherTyping(Boolean(p.typing));
+      if (otherTypingTimer.current) clearTimeout(otherTypingTimer.current);
+      if (p.typing) {
+        otherTypingTimer.current = setTimeout(
+          () => setOtherTyping(false),
+          1500
+        );
+      }
+    });
 
-  if (by === "system") endOnce("system");
-  else if (by === userToken) endOnce("you");
-  else endOnce("other");
-});
+    ch.on("broadcast", { event: "end" }, (evt: any) => {
+      clearLocalHistory();
+      const p = unwrapBroadcast(evt);
+      const by = p?.by;
 
-
+      if (by === "system") endOnce("system");
+      else if (by === userToken) endOnce("you");
+      else endOnce("other");
+    });
 
     ch.subscribe((status: any) => {
       setConnected(status === "SUBSCRIBED");
@@ -393,41 +423,33 @@ ch.on("broadcast", { event: "end" }, (evt: any) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, channelName, userToken]);
 
+  // DB watch: if ended_at is set, show ended screen (and clear local history)
+  useEffect(() => {
+    if (!roomId || ended) return;
 
- // DB watch: if ended_at is set, show ended screen (and clear local history)
-// IMPORTANT: ended_at can be set by: (a) you, (b) stranger, (c) system @ 10PM.
-// Do NOT assume "system" unless it's actually past 10PM Manila.
-useEffect(() => {
-  if (!roomId || ended) return;
+    const interval = setInterval(async () => {
+      try {
+        const { data } = await supabaseBrowser
+          .from("rooms")
+          .select("ended_at")
+          .eq("id", roomId)
+          .maybeSingle();
 
-  const interval = setInterval(async () => {
-    try {
-      const { data } = await supabaseBrowser
-        .from("rooms")
-        .select("ended_at")
-        .eq("id", roomId)
-        .maybeSingle();
+        if (data?.ended_at) {
+          clearLocalHistory();
 
-      if (data?.ended_at) {
-        clearLocalHistory();
+          if (endLockedRef.current) return;
 
-        // If something already decided the reason, don't overwrite it.
-        if (endLockedRef.current) return;
+          const msLeft = getMsUntilManila10pm();
+          if (msLeft <= 0) endOnce("system");
+          else endOnce("other");
+        }
+      } catch {}
+    }, 2000);
 
-        // Only call "system" if we are at/after 10PM Manila.
-        const msLeft = getMsUntilManila10pm();
-        if (msLeft <= 0) endOnce("system");
-        else endOnce("other");
-      }
-    } catch {}
-  }, 2000);
-
-  return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [roomId, ended]);
-
-
-
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, ended]);
 
   // Load tonight's remaining self-end limit
   useEffect(() => {
@@ -475,6 +497,8 @@ useEffect(() => {
     const trimmed = text.trim();
     if (!trimmed || ended) return;
 
+    primeAudio(); // ✅ user gesture path (also primes on send)
+
     const ch = chRef.current;
     if (!ch) return;
 
@@ -485,7 +509,6 @@ useEffect(() => {
       ts: Date.now(),
     };
 
-    // If I'm sending, always stick to bottom
     stickToBottomRef.current = true;
 
     setMessages((prev) => [...prev, msg]);
@@ -497,12 +520,12 @@ useEffect(() => {
     });
 
     await ch.send({ type: "broadcast", event: "message", payload: msg });
-  await fetch("/api/room/ping-message", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ room_id: roomId }),
-}).catch(() => null);
 
+    await fetch("/api/room/ping-message", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ room_id: roomId }),
+    }).catch(() => null);
   }
 
   async function endChat() {
@@ -564,7 +587,7 @@ useEffect(() => {
         });
       }
 
-           endOnce("you");
+      endOnce("you");
 
       setEnding(false);
     } catch (e: any) {
@@ -574,7 +597,7 @@ useEffect(() => {
   }
 
   // ====== END SCREEN ======
-    if (ended) {
+  if (ended) {
     const title =
       endedReason === "you"
         ? "You have ended the chat."
@@ -587,7 +610,6 @@ useEffect(() => {
         ? "Thank you for chatting tonight. See you tomorrow."
         : "Try to find a new match.";
 
-
     return (
       <main className="min-h-screen bg-teal-600 flex flex-col">
         <div className="flex-1 flex items-center justify-center p-4">
@@ -599,8 +621,8 @@ useEffect(() => {
               Hi, Stranger
             </h1>
 
-<p className="mt-3 text-gray-800 font-medium">{title}</p>
-<p className="mt-2 text-gray-700">{subtitle}</p>
+            <p className="mt-3 text-gray-800 font-medium">{title}</p>
+            <p className="mt-2 text-gray-700">{subtitle}</p>
 
             <button
               className="mt-6 w-full rounded-2xl bg-gradient-to-br from-teal-500 to-teal-600 py-3 text-white font-medium shadow-md hover:shadow-lg active:scale-[0.98] transition"
@@ -625,9 +647,7 @@ useEffect(() => {
     <main className="min-h-screen bg-teal-600 flex flex-col">
       {/* Chat area */}
       <div className="flex-1 flex items-center justify-center p-3">
-<div className="w-full max-w-md h-[90dvh] sm:h-[720px] rounded-3xl bg-white/90 backdrop-blur border border-teal-100 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.25)] overflow-hidden flex flex-col">
-
-
+        <div className="w-full max-w-md h-[90dvh] sm:h-[720px] rounded-3xl bg-white/90 backdrop-blur border border-teal-100 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.25)] overflow-hidden flex flex-col">
           {/* HEADER */}
           <div className="px-4 py-3 bg-gradient-to-r from-teal-50 to-teal-100/50 border-b border-teal-100">
             <div className="flex justify-between items-start">
@@ -673,13 +693,13 @@ useEffect(() => {
             )}
           </div>
 
-{/* MESSAGES */}
-<div
-  ref={listRef}
-  className="flex-1 min-h-0 p-4 overflow-y-auto bg-white/70"
->
-
-
+          {/* MESSAGES */}
+          <div
+            ref={listRef}
+            className="flex-1 min-h-0 p-4 overflow-y-auto bg-white/70"
+            onPointerDown={() => primeAudio()} // ✅ primes sound on first interaction too
+            onTouchStart={() => primeAudio()}
+          >
             {messages.length === 0 ? (
               <div className="text-sm text-gray-600">Say hi 👋</div>
             ) : (
@@ -688,7 +708,9 @@ useEffect(() => {
                 return (
                   <div
                     key={m.id}
-                    className={`${mine ? "flex justify-end" : "flex justify-start"} mb-1.5`}
+                    className={`${
+                      mine ? "flex justify-end" : "flex justify-start"
+                    } mb-1.5`}
                   >
                     <div
                       className={
@@ -720,7 +742,7 @@ useEffect(() => {
                   value={text}
                   onChange={(e) => handleTextChange(e.target.value)}
                   onFocus={() => {
-                    // When keyboard opens, keep last message visible (if user is sticky)
+                    primeAudio(); // ✅ primes sound on focus too
                     if (stickToBottomRef.current) {
                       requestAnimationFrame(() => scrollToBottom("auto"));
                     }
@@ -737,7 +759,10 @@ useEffect(() => {
                 />
               </div>
               <button
-                onClick={sendMessage}
+                onClick={() => {
+                  primeAudio();
+                  sendMessage();
+                }}
                 disabled={!connected || !text.trim()}
                 className={
                   connected && text.trim()
